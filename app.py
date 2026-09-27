@@ -29,8 +29,8 @@ MATERI_PDF_PATH = os.path.join("materi", "budaya_minangkabau.pdf")
 MATERI_LINK = "https://drive.google.com/your-link-here"  # TODO: ganti dengan link materi asli
 
 TEMPLATE_GREETING = (
-    "Hallo saya chatbot khusu untuk membuat soal berdasarkan pelajarn yang "
-    "dipilih..silahakn ketik ya agar saya bisa membuat soal untuk anda?"
+    "Hallo saya chatbot khusus untuk membuat soal berdasarkan pelajaran yang "
+    "dipilih..silahkan ketik ya agar saya bisa membuat soal untuk anda?"
 )
 
 YA_VARIANTS = {"ya", "iya", "y", "ok", "oke", "siap", "boleh", "mau", "yes"}
@@ -220,7 +220,7 @@ def render_chat():
         st.link_button("🔗 Klik di sini untuk akses materi", MATERI_LINK)
 
     st.caption("Silahkan klik link di atas untuk akses materi.")
-    st.title("🎓 Chatbot Soal - Budaya Adat Minangkabau")
+    st.title("🎓 Chatbot Soal - BAM")
 
     # Load materi PDF sekali saja (di-cache)
     if not os.path.exists(MATERI_PDF_PATH):
@@ -285,7 +285,7 @@ def render_chat():
 # MAIN
 # ============================================================
 def main():
-    st.set_page_config(page_title="Schoool Question Generated For 3 SD", page_icon="📚")
+    st.set_page_config(page_title="Schoool Question Generated", page_icon="📚")
     init_state()
 
     if st.session_state.page == "home":
