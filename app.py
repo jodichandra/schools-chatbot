@@ -267,14 +267,17 @@ MATERI:
 def render_quiz_form():
     quiz_data = st.session_state.get("quiz_data")
     if not quiz_data or not quiz_data.get("soal_list"):
+        st.info(
+            "Belum ada soal. Ketik **'buat soal'** di panel Chat sebelah kiri untuk "
+            "membuat soal latihan berdasarkan materi yang diupload."
+        )
         return
 
     soal_list = quiz_data["soal_list"]
     kunci_list = quiz_data["kunci_list"]
     version = st.session_state.get("quiz_version", 0)
 
-    st.markdown("---")
-    st.subheader("✏️ Jawab Soal di Bawah Ini")
+    st.markdown("#### ✏️ Jawab Soal di Bawah Ini")
 
     with st.form(key=f"quiz_form_{version}"):
         jawaban_user = {}
@@ -315,8 +318,14 @@ def render_quiz_form():
             + "\n".join(detail_lines)
         )
 
-        st.session_state.messages.append({"role": "assistant", "content": hasil_text})
+        # Hasil disimpan terpisah dari riwayat chat, ditampilkan langsung di bawah form ini.
+        st.session_state.quiz_result = hasil_text
         st.rerun()
+
+    # Tampilkan hasil (kalau ada) tepat di bawah form, BUKAN di dalam chat.
+    if st.session_state.get("quiz_result"):
+        st.markdown("---")
+        st.markdown(st.session_state.quiz_result)
 
 
 # ============================================================
@@ -329,6 +338,7 @@ def init_state():
     st.session_state.setdefault("materi_text", None)
     st.session_state.setdefault("materi_filename", None)
     st.session_state.setdefault("quiz_data", None)
+    st.session_state.setdefault("quiz_result", None)
     st.session_state.setdefault("quiz_version", 0)
 
 
@@ -336,6 +346,7 @@ def reset_chat_state():
     st.session_state.messages = []
     st.session_state.current_answer_text = None
     st.session_state.quiz_data = None
+    st.session_state.quiz_result = None
     st.session_state.quiz_version += 1
 
 
@@ -424,68 +435,73 @@ def render_chat():
             st.rerun()
         return
 
-    st.info(
-        "Silahkan ajukan pertanyaan berdasarkan materi yang diupload, atau ketik "
-        "**'buat soal'** jika ingin dibuatkan soal latihan. "
-        "Ketik **'kunci jawaban'** untuk melihat jawabannya."
-    )
+    col_chat, col_soal = st.columns([5, 6], gap="large")
 
-    # Tampilkan riwayat chat
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+    # ------------------------------------------------------------------
+    # KOLOM KIRI: CHAT
+    # ------------------------------------------------------------------
+    with col_chat:
+        st.subheader("💬 Chat")
+        st.caption(
+            "Ajukan pertanyaan berdasarkan materi, atau ketik **'buat soal'** untuk "
+            "dibuatkan soal latihan di panel sebelah kanan."
+        )
 
-    # Form kuis interaktif (muncul kalau ada soal yang sedang aktif)
-    render_quiz_form()
+        chat_box = st.container(height=420)
+        with chat_box:
+            for m in st.session_state.messages:
+                with st.chat_message(m["role"]):
+                    st.markdown(m["content"])
 
-    user_input = st.chat_input("Ketik pesan Anda di sini...")
-    if not user_input:
-        return
+        user_input = st.chat_input("Ketik pesan Anda di sini...")
 
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+        if user_input:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            normalized = user_input.strip().lower()
 
-    normalized = user_input.strip().lower()
-
-    with st.chat_message("assistant"):
-        with st.spinner("Sedang memproses..."):
-
-            if is_soal_trigger(normalized):
-                quiz_data = generate_quiz(materi_text)
-                st.session_state.quiz_data = quiz_data
-                st.session_state.current_answer_text = quiz_data["answer_text"]
-                st.session_state.quiz_version += 1
-                bot_reply = (
-                    f"{quiz_data['quiz_text']}\n\n"
-                    "📌 Silahkan jawab soal di atas lewat pilihan A/B/C/D di bawah lalu klik "
-                    "**'Lihat Hasil'** untuk melihat nilai kamu, atau ketik **'kunci jawaban'** "
-                    "untuk melihat kunci jawabannya."
-                )
-
-            elif is_kunci_jawaban_request(normalized):
-                if st.session_state.current_answer_text:
-                    bot_reply = st.session_state.current_answer_text
-                else:
+            with st.spinner("Sedang memproses..."):
+                if is_soal_trigger(normalized):
+                    quiz_data = generate_quiz(materi_text)
+                    st.session_state.quiz_data = quiz_data
+                    st.session_state.current_answer_text = quiz_data["answer_text"]
+                    st.session_state.quiz_result = None
+                    st.session_state.quiz_version += 1
+                    topik = quiz_data.get("topik") or ""
+                    judul = f" - {topik}" if topik else ""
                     bot_reply = (
-                        "Soal belum dibuat. Ketik **'buat soal'** terlebih dahulu untuk "
-                        "membuat soal latihan."
+                        f"✅ Soal latihan{judul} sudah dibuat! Silahkan jawab lewat panel "
+                        "**Soal** di sebelah kanan, lalu klik **'Lihat Hasil'** untuk melihat "
+                        "nilai kamu. Atau ketik **'kunci jawaban'** untuk melihat kunci jawabannya."
                     )
 
-            else:
-                bot_reply = grounded_chat(materi_text, st.session_state.messages, user_input)
+                elif is_kunci_jawaban_request(normalized):
+                    if st.session_state.current_answer_text:
+                        bot_reply = st.session_state.current_answer_text
+                    else:
+                        bot_reply = (
+                            "Soal belum dibuat. Ketik **'buat soal'** terlebih dahulu untuk "
+                            "membuat soal latihan."
+                        )
 
-        st.markdown(bot_reply)
+                else:
+                    bot_reply = grounded_chat(materi_text, st.session_state.messages, user_input)
 
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-    st.rerun()
+            st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+            st.rerun()
+
+    # ------------------------------------------------------------------
+    # KOLOM KANAN: SOAL + HASIL
+    # ------------------------------------------------------------------
+    with col_soal:
+        st.subheader("📝 Soal")
+        render_quiz_form()
 
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
-    st.set_page_config(page_title="Schoool Question Generated", page_icon="📚")
+    st.set_page_config(page_title="Schoool Question Generated", page_icon="📚", layout="wide")
     init_state()
 
     page = st.session_state.page
