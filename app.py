@@ -5,13 +5,21 @@ Final Project - Chatbot Pembuat Soal Latihan Berbasis Materi PDF Upload User (Op
 Topik/materi TIDAK dikunci ke satu mata pelajaran tertentu.
 Soal dan jawaban dibuat berdasarkan isi PDF yang diupload user, apa pun topiknya.
 
-Alur:
-1. Halaman Home -> (Upload Materi)
-2. Halaman Upload -> user upload PDF materi sendiri (maksimal 5 halaman)
-3. Halaman Chat -> tanya jawab / minta dibuatkan soal berdasarkan materi yang diupload
+Perilaku chatbot:
+- Pertanyaan biasa -> dijawab berdasarkan isi materi PDF saja (grounded chat)
+- Diminta membuat soal (kata kunci eksplisit) -> membuat soal + kunci jawaban
+- Pertanyaan di luar konteks materi -> ditolak dengan sopan
+- Diminta membuat kode program -> ditolak, chatbot hanya menjelaskan sesuai materi,
+  TIDAK menuliskan kode, walaupun materinya tentang koding
+
+Alur halaman:
+1. Home -> Upload Materi
+2. Upload -> user upload PDF materi sendiri (maksimal 5 halaman)
+3. Chat -> tanya jawab / minta dibuatkan soal berdasarkan materi yang diupload
 """
 
 import os
+import re
 import json
 
 import streamlit as st
@@ -25,10 +33,28 @@ from openai import OpenAI
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
 
-SOAL_TRIGGER_KEYWORDS = {
-    "ya", "iya", "y", "ok", "oke", "siap", "boleh", "mau", "yes",
-    "buat soal", "buatkan soal", "soal latihan", "kuis", "quiz",
-}
+# Pola eksplisit untuk mendeteksi permintaan "buatkan soal".
+# Pakai word boundary (\b) supaya tidak ke-trigger oleh kata lain
+# yang kebetulan mengandung potongan huruf yang sama.
+SOAL_TRIGGER_PATTERNS = [
+    r"\bbuat(?:kan)?\s+soal\b",
+    r"\bbikin(?:kan)?\s+soal\b",
+    r"\bsoal\s+latihan\b",
+    r"\bkuis\b",
+    r"\bquiz\b",
+    r"\bgenerate\s+soal\b",
+]
+
+# Pola untuk mendeteksi permintaan "kunci jawaban"
+KUNCI_JAWABAN_PATTERN = r"\bkunci\s+jawaban\b"
+
+
+def is_soal_trigger(normalized_text: str) -> bool:
+    return any(re.search(pattern, normalized_text) for pattern in SOAL_TRIGGER_PATTERNS)
+
+
+def is_kunci_jawaban_request(normalized_text: str) -> bool:
+    return re.search(KUNCI_JAWABAN_PATTERN, normalized_text) is not None
 
 
 # ============================================================
@@ -155,10 +181,17 @@ Topik chatbot ini MENGIKUTI isi MATERI PDF yang diupload user di bawah ini, apa 
 (bisa pelajaran apa saja, bukan topik tertentu yang tetap).
 
 ATURAN PENTING:
-1. Kamu HANYA boleh menjawab berdasarkan MATERI di bawah ini.
-2. Jika pertanyaan user tidak berkaitan dengan materi ini, tolak dengan sopan
-   dan arahkan user untuk meminta dibuatkan soal latihan dari materi ini.
-3. Gunakan bahasa sederhana dan ramah, sesuai untuk anak kelas 3 SD.
+1. Kamu HANYA boleh menjawab pertanyaan berdasarkan isi MATERI di bawah ini.
+   Jawab pertanyaan user secara langsung sesuai apa yang ditanyakan, jangan membuatkan
+   soal kecuali user secara eksplisit memintanya.
+2. Jika pertanyaan user tidak berkaitan dengan MATERI ini, tolak dengan sopan
+   dan jelaskan bahwa kamu hanya bisa menjawab sesuai materi yang diupload.
+3. Jika user meminta kamu MENULISKAN, MEMBUAT, atau MEMPERBAIKI kode program
+   (coding/script/program), TOLAK dengan sopan. Katakan kamu hanya bisa menjelaskan
+   sesuai isi materi dan tidak membuat kode program. Ini berlaku juga walaupun
+   MATERI di bawah ini tentang pemrograman/koding — kamu tetap hanya boleh
+   menjelaskan konsepnya sesuai teks materi, TIDAK menuliskan kode program apa pun.
+4. Gunakan bahasa sederhana dan ramah, sesuai untuk anak kelas 3 SD.
 
 MATERI:
 {materi_text}
@@ -212,6 +245,7 @@ def render_home():
         reset_materi_state()
         st.session_state.page = "upload"
         st.rerun()
+
 
 # ============================================================
 # HALAMAN: UPLOAD MATERI
@@ -278,8 +312,9 @@ def render_chat():
         return
 
     st.info(
-        "Silahkan ajukan pertanyaan atau minta dibuatkan soal berdasarkan "
-        "materi yang diberikan. Ketik **'kunci jawaban'** untuk melihat jawabannya."
+        "Silahkan ajukan pertanyaan berdasarkan materi yang diupload, atau ketik "
+        "**'buat soal'** jika ingin dibuatkan soal latihan. "
+        "Ketik **'kunci jawaban'** untuk melihat jawabannya."
     )
 
     # Tampilkan riwayat chat
@@ -300,7 +335,7 @@ def render_chat():
     with st.chat_message("assistant"):
         with st.spinner("Sedang memproses..."):
 
-            if any(kw in normalized for kw in SOAL_TRIGGER_KEYWORDS):
+            if is_soal_trigger(normalized):
                 quiz_text, answer_text = generate_quiz(materi_text)
                 st.session_state.current_answer_text = answer_text
                 bot_reply = (
@@ -308,7 +343,7 @@ def render_chat():
                     "📌 Jika ingin mengetahui jawabannya, silahkan ketik **'kunci jawaban'**."
                 )
 
-            elif "kunci" in normalized and "jawaban" in normalized:
+            elif is_kunci_jawaban_request(normalized):
                 if st.session_state.current_answer_text:
                     bot_reply = st.session_state.current_answer_text
                 else:
