@@ -544,7 +544,7 @@ footer {
     left: 5.75vw !important;
     right: 5.75vw !important;
     z-index: 900 !important;
-    background: var(--background-color) !important;
+    background: #fff !important;
     padding-bottom: 4px !important;
 }
 .st-key-chat_header > div {
