@@ -11,7 +11,7 @@ import streamlit as st
 import pdfplumber
 from openai import OpenAI
 
-
+st.html("<style> .main {overflow: hidden;} </style>")
 # ============================================================
 # KONFIGURASI
 # ============================================================
