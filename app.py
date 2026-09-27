@@ -11,7 +11,7 @@ import streamlit as st
 import pdfplumber
 from openai import OpenAI
 
-st.html("<style> .main {overflow: hidden;} </style>")
+
 # ============================================================
 # KONFIGURASI
 # ============================================================
@@ -357,15 +357,16 @@ def render_upload():
 
 # ============================================================
 # CSS KHUSUS HALAMAN CHAT
-# ------------------------------------------------------------
-# Tujuan:
-# 1. Matikan scroll halaman total (overflow: hidden di semua level atas)
-# 2. Bikin block-container & kolom flex-column setinggi viewport
-# 3. Chat input nempel di bawah kolom (bukan di bawah halaman)
-# 4. Container chat & soal punya scroll INTERNAL sendiri
 # ============================================================
 CSS_CHAT = """
 <style>
+/* === 0. KUNCI: matikan scroll-anchor browser ===
+   Ini mencegah Chrome/Firefox "auto-scroll" saat Streamlit rerun,
+   yang bikin chat input kelihatan tidak nempel di bawah. */
+* {
+    overflow-anchor: none !important;
+}
+
 /* === 1. Matikan scroll halaman total === */
 html, body {
     overflow: hidden !important;
@@ -382,13 +383,9 @@ section.main {
     max-height: 100vh !important;
 }
 
-/* Sembunyikan header & footer Streamlit biar rapi */
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-footer {
-    display: none !important;
-}
+/* Sembunyikan header & footer Streamlit */
+header[data-testid="stHeader"] { display: none !important; }
+footer { display: none !important; }
 
 /* === 2. Block container: flex column setinggi viewport === */
 .main .block-container,
@@ -404,7 +401,7 @@ footer {
     box-sizing: border-box !important;
 }
 
-/* === 3. Baris kolom utama: flex 1, isi sisa ruang === */
+/* === 3. Baris kolom terakhir (chat + soal): isi sisa ruang === */
 .main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type {
     flex: 1 1 auto !important;
     min-height: 0 !important;
@@ -412,7 +409,7 @@ footer {
     align-items: stretch !important;
 }
 
-/* === 4. Setiap kolom: flex column, penuh tinggi baris === */
+/* === 4. Setiap kolom: flex column penuh tinggi === */
 .main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] {
     height: 100% !important;
     max-height: 100% !important;
@@ -422,7 +419,7 @@ footer {
     overflow: hidden !important;
 }
 
-/* === 5. Container scroll internal chat/soal: isi sisa tinggi kolom === */
+/* === 5. Container scroll internal (chat_box, soal_box): isi sisa tinggi kolom === */
 .main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
     div[data-testid="stVerticalBlockBorderWrapper"] {
     flex: 1 1 auto !important;
@@ -431,14 +428,16 @@ footer {
     overflow-x: hidden !important;
 }
 
-/* === 6. Chat input: jangan shrink, tetap di bawah kolom === */
+/* === 6. Chat input: nempel di bawah kolom, tidak shrink === */
 .main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
     div[data-testid="stChatInput"] {
     flex-shrink: 0 !important;
     margin-top: 8px !important;
+    position: relative !important;
+    z-index: 5 !important;
 }
 
-/* === 7. Elemen lain di kolom (caption, markdown) jangan shrink === */
+/* === 7. Elemen lain di kolom jangan shrink === */
 .main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
     > div:not([data-testid="stVerticalBlockBorderWrapper"]):not([data-testid="stChatInput"]) {
     flex-shrink: 0 !important;
@@ -451,7 +450,6 @@ footer {
 # HALAMAN: CHATBOT
 # ============================================================
 def render_chat():
-    # Inject CSS di awal
     st.markdown(CSS_CHAT, unsafe_allow_html=True)
 
     materi_text = st.session_state.get("materi_text")
@@ -476,7 +474,7 @@ def render_chat():
             st.rerun()
         return
 
-    # ---------- LAYOUT: 1 kolom atau 2 kolom ----------
+    # ---------- LAYOUT ----------
     if has_quiz:
         col_chat, col_soal = st.columns([1, 1], gap="medium")
     else:
@@ -493,8 +491,7 @@ def render_chat():
             "dibuatkan soal latihan."
         )
 
-        # Container chat dengan tinggi tetap -> scroll internal di sini
-        chat_box = st.container(height=520, border=True)
+        chat_box = st.container(height=480, border=True)
         with chat_box:
             if not st.session_state.messages:
                 st.caption("_Belum ada pesan. Mulai dengan mengetik pertanyaan di bawah._")
@@ -538,7 +535,7 @@ def render_chat():
     if col_soal is not None:
         with col_soal:
             st.markdown("#### 📝 Soal")
-            soal_box = st.container(height=520, border=True)
+            soal_box = st.container(height=480, border=True)
             with soal_box:
                 render_quiz_form()
 
@@ -547,8 +544,6 @@ def render_chat():
 # MAIN
 # ============================================================
 def main():
-    # PENTING: pakai "wide" supaya block-container bisa full width.
-    # Saat belum ada soal, kita persempit manual lewat CSS via marker class.
     st.set_page_config(
         page_title="Schoool Question Generated",
         page_icon="📚",
