@@ -173,25 +173,48 @@ MATERI:
 # ============================================================
 # CHAT UMUM (topik mengikuti isi PDF, dibatasi hanya pada materi)
 # ============================================================
+OUT_OF_CONTEXT_MESSAGE = (
+    "Maaf, pertanyaan itu tidak sesuai dengan materi yang diupload. "
+    "Saya hanya bisa menjawab berdasarkan materi ini. 😊"
+)
+
+CODE_REQUEST_MESSAGE = (
+    "Maaf, saya hanya bisa menjelaskan sesuai isi materi. "
+    "Saya tidak bisa membuatkan kode program, aplikasi, atau halaman web apa pun, "
+    "meskipun materinya tentang koding."
+)
+
+
 def grounded_chat(materi_text: str, history: list, user_input: str) -> str:
+    """
+    Dua tahap dalam satu pemanggilan:
+    1. Model MENGKLASIFIKASI pertanyaan user: relevan dengan materi atau tidak,
+       dan apakah ini permintaan membuat kode program.
+    2. Keputusan akhir dipegang oleh KODE (bukan model), supaya penolakan
+       tidak bisa dilewati/dielaborasi oleh model.
+    """
     client = get_openai_client()
 
-    system_prompt = f"""Kamu adalah chatbot ramah untuk siswa kelas 3 SD.
-Topik chatbot ini MENGIKUTI isi MATERI PDF yang diupload user di bawah ini, apa pun isinya
-(bisa pelajaran apa saja, bukan topik tertentu yang tetap).
+    system_prompt = f"""Kamu bertugas mengklasifikasikan dan menjawab pertanyaan siswa kelas 3 SD.
 
-ATURAN PENTING:
-1. Kamu HANYA boleh menjawab pertanyaan berdasarkan isi MATERI di bawah ini.
-   Jawab pertanyaan user secara langsung sesuai apa yang ditanyakan, jangan membuatkan
-   soal kecuali user secara eksplisit memintanya.
-2. Jika pertanyaan user tidak berkaitan dengan MATERI ini, tolak dengan sopan
-   dan jelaskan bahwa kamu hanya bisa menjawab sesuai materi yang diupload.
-3. Jika user meminta kamu MENULISKAN, MEMBUAT, atau MEMPERBAIKI kode program
-   (coding/script/program), TOLAK dengan sopan. Katakan kamu hanya bisa menjelaskan
-   sesuai isi materi dan tidak membuat kode program. Ini berlaku juga walaupun
-   MATERI di bawah ini tentang pemrograman/koding — kamu tetap hanya boleh
-   menjelaskan konsepnya sesuai teks materi, TIDAK menuliskan kode program apa pun.
-4. Gunakan bahasa sederhana dan ramah, sesuai untuk anak kelas 3 SD.
+Tugas kamu:
+1. Tentukan apakah PERTANYAAN USER relevan dengan MATERI di bawah ini
+   (relevan = bisa dijawab dari isi materi tersebut).
+2. Tentukan apakah PERTANYAAN USER adalah permintaan untuk MEMBUAT, MENULIS, atau
+   MEMPERBAIKI kode program, aplikasi, script, atau halaman web apa pun.
+   Ini TETAP dianggap permintaan kode walaupun MATERI di bawah ini kebetulan
+   membahas topik pemrograman/koding.
+3. Jika relevan DAN BUKAN permintaan kode: isi field "jawaban" dengan jawaban
+   untuk siswa, HANYA berdasarkan isi MATERI, bahasa sederhana untuk anak kelas 3 SD.
+4. Jika tidak relevan ATAU merupakan permintaan kode: kosongkan field "jawaban"
+   (string kosong ""), tidak perlu menjelaskan apa pun di situ.
+
+Balas HANYA dalam format JSON berikut, tanpa teks tambahan apa pun:
+{{
+  "relevan": true atau false,
+  "permintaan_kode": true atau false,
+  "jawaban": ""
+}}
 
 MATERI:
 {materi_text}
@@ -205,9 +228,25 @@ MATERI:
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
-        temperature=0.4,
+        temperature=0.2,
+        response_format={"type": "json_object"},
     )
-    return response.choices[0].message.content
+
+    raw = response.choices[0].message.content
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return "Maaf, terjadi kendala saat memproses jawaban. Coba tanyakan lagi."
+
+    # Keputusan akhir dipegang di sini, BUKAN oleh teks bebas dari model.
+    if data.get("permintaan_kode"):
+        return CODE_REQUEST_MESSAGE
+
+    if not data.get("relevan"):
+        return OUT_OF_CONTEXT_MESSAGE
+
+    jawaban = (data.get("jawaban") or "").strip()
+    return jawaban if jawaban else OUT_OF_CONTEXT_MESSAGE
 
 
 # ============================================================
