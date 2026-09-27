@@ -116,7 +116,7 @@ MATERI:
     soal_list = data.get("soal", [])
     kunci_list = data.get("kunci_jawaban", [])
 
-    quiz_lines = ["📝 **Soal Latihan - Budaya Adat Minangkabau**", ""]
+    quiz_lines = ["📝 **Soal Latihan - BAM**", ""]
     for s in soal_list:
         quiz_lines.append(f"**{s.get('nomor')}. {s.get('pertanyaan')}**")
         for opt, text in s.get("pilihan", {}).items():
@@ -187,7 +187,7 @@ def reset_chat_state():
 # HALAMAN: HOME
 # ============================================================
 def render_home():
-    st.title("📚 Schoool Question Generated For 3 SD")
+    st.title("📚 Schoool Question Generated")
     st.write("Selamat datang! Pilih mata pelajaran untuk membuat soal latihan.")
 
     st.subheader("Daftar Pelajaran")
