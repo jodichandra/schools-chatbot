@@ -143,7 +143,13 @@ MATERI:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return raw, "Kunci jawaban tidak tersedia karena format soal tidak sesuai. Coba minta buat soal lagi."
+        return {
+            "quiz_text": raw,
+            "answer_text": "Kunci jawaban tidak tersedia karena format soal tidak sesuai. Coba minta buat soal lagi.",
+            "soal_list": [],
+            "kunci_list": [],
+            "topik": "",
+        }
 
     topik = data.get("topik", "").strip()
     soal_list = sorted(data.get("soal", []), key=lambda s: s.get("nomor", 0))
@@ -167,7 +173,13 @@ MATERI:
         answer_lines.append(line)
     answer_text = "\n".join(answer_lines).strip()
 
-    return quiz_text, answer_text
+    return {
+        "quiz_text": quiz_text,
+        "answer_text": answer_text,
+        "soal_list": soal_list,
+        "kunci_list": kunci_list,
+        "topik": topik,
+    }
 
 
 # ============================================================
@@ -250,6 +262,64 @@ MATERI:
 
 
 # ============================================================
+# FORM KUIS INTERAKTIF (radio button A/B/C/D + penilaian otomatis)
+# ============================================================
+def render_quiz_form():
+    quiz_data = st.session_state.get("quiz_data")
+    if not quiz_data or not quiz_data.get("soal_list"):
+        return
+
+    soal_list = quiz_data["soal_list"]
+    kunci_list = quiz_data["kunci_list"]
+    version = st.session_state.get("quiz_version", 0)
+
+    st.markdown("---")
+    st.subheader("✏️ Jawab Soal di Bawah Ini")
+
+    with st.form(key=f"quiz_form_{version}"):
+        jawaban_user = {}
+        for s in soal_list:
+            nomor = s.get("nomor")
+            pertanyaan = s.get("pertanyaan")
+            pilihan = sorted(s.get("pilihan", {}).items(), key=lambda pair: pair[0])
+            option_labels = [f"{opt}. {text}" for opt, text in pilihan]
+
+            pilihan_terpilih = st.radio(
+                f"{nomor}. {pertanyaan}",
+                options=option_labels,
+                index=None,
+                key=f"quiz_radio_{version}_{nomor}",
+            )
+            jawaban_user[nomor] = pilihan_terpilih.split(".")[0].strip() if pilihan_terpilih else None
+
+        submitted = st.form_submit_button("📊 Lihat Hasil")
+
+    if submitted:
+        kunci_map = {k.get("nomor"): k.get("jawaban") for k in kunci_list}
+        total_soal = len(kunci_map)
+        jumlah_benar = 0
+        detail_lines = []
+
+        for nomor in sorted(kunci_map.keys()):
+            jawaban_benar = kunci_map[nomor]
+            jawaban_dipilih = jawaban_user.get(nomor)
+            benar = jawaban_dipilih == jawaban_benar
+            if benar:
+                jumlah_benar += 1
+            status = "✅ Benar" if benar else f"❌ Salah (jawaban benar: **{jawaban_benar}**)"
+            detail_lines.append(f"- Soal {nomor}: kamu jawab **{jawaban_dipilih or '(belum dijawab)'}** — {status}")
+
+        skor = round((jumlah_benar / total_soal) * 100) if total_soal else 0
+        hasil_text = (
+            f"🎯 **Hasil Kuis: {skor} / 100** ({jumlah_benar} dari {total_soal} soal benar)\n\n"
+            + "\n".join(detail_lines)
+        )
+
+        st.session_state.messages.append({"role": "assistant", "content": hasil_text})
+        st.rerun()
+
+
+# ============================================================
 # STATE HELPERS
 # ============================================================
 def init_state():
@@ -258,11 +328,15 @@ def init_state():
     st.session_state.setdefault("current_answer_text", None)
     st.session_state.setdefault("materi_text", None)
     st.session_state.setdefault("materi_filename", None)
+    st.session_state.setdefault("quiz_data", None)
+    st.session_state.setdefault("quiz_version", 0)
 
 
 def reset_chat_state():
     st.session_state.messages = []
     st.session_state.current_answer_text = None
+    st.session_state.quiz_data = None
+    st.session_state.quiz_version += 1
 
 
 def reset_materi_state():
@@ -361,6 +435,9 @@ def render_chat():
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
+    # Form kuis interaktif (muncul kalau ada soal yang sedang aktif)
+    render_quiz_form()
+
     user_input = st.chat_input("Ketik pesan Anda di sini...")
     if not user_input:
         return
@@ -375,11 +452,15 @@ def render_chat():
         with st.spinner("Sedang memproses..."):
 
             if is_soal_trigger(normalized):
-                quiz_text, answer_text = generate_quiz(materi_text)
-                st.session_state.current_answer_text = answer_text
+                quiz_data = generate_quiz(materi_text)
+                st.session_state.quiz_data = quiz_data
+                st.session_state.current_answer_text = quiz_data["answer_text"]
+                st.session_state.quiz_version += 1
                 bot_reply = (
-                    f"{quiz_text}\n\n"
-                    "📌 Jika ingin mengetahui jawabannya, silahkan ketik **'kunci jawaban'**."
+                    f"{quiz_data['quiz_text']}\n\n"
+                    "📌 Silahkan jawab soal di atas lewat pilihan A/B/C/D di bawah lalu klik "
+                    "**'Lihat Hasil'** untuk melihat nilai kamu, atau ketik **'kunci jawaban'** "
+                    "untuk melihat kunci jawabannya."
                 )
 
             elif is_kunci_jawaban_request(normalized):
@@ -397,6 +478,7 @@ def render_chat():
         st.markdown(bot_reply)
 
     st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+    st.rerun()
 
 
 # ============================================================
