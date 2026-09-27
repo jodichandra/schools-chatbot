@@ -684,6 +684,15 @@ footer {
     margin-top: 0.2rem !important;
 }
 
+[data-testid="column"] > div,
+[data-testid="column"] > div > div[data-testid="stVerticalBlock"] {
+    min-height: 0 !important;
+    overflow: hidden !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
 /* =========================================================
    PREVENT AUTO ANCHOR
    ========================================================= */
