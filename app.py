@@ -206,7 +206,7 @@ def render_home():
     st.title("📚 Schoool Question Generated")
     st.write("Selamat datang! Pilih menu untuk membuat soal latihan.")
 
-    st.subheader("Muatan Lokal")
+    st.title("Upload Materi PDF")
     st.caption("Upload materi PDF-mu sendiri, soal dan jawaban akan mengikuti isi materi tersebut.")
     if st.button("📄 Upload Materi & Buat Soal", use_container_width=True, type="primary"):
         reset_materi_state()
