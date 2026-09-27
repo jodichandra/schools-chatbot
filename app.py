@@ -386,133 +386,284 @@ def render_upload():
 # ============================================================
 CSS_CHAT = """
 <style>
-/* ===== GLOBAL ===== */
-html, body {
-    height: 100% !important;
-    width: 100% !important;
+
+/* =========================================================
+   GLOBAL VIEWPORT
+   ========================================================= */
+
+html,
+body {
+
     margin: 0 !important;
     padding: 0 !important;
+
+    width: 100% !important;
+    height: 100% !important;
+
     overflow: hidden !important;
 }
+
+
+/* =========================================================
+   STREAMLIT APP
+   ========================================================= */
+
 .stApp {
+
+    width: 100% !important;
     height: 100vh !important;
     max-height: 100vh !important;
+
     overflow: hidden !important;
 }
+
+
 [data-testid="stAppViewContainer"] {
+
+    width: 100% !important;
     height: 100vh !important;
     max-height: 100vh !important;
+
     overflow: hidden !important;
 }
+
+
 [data-testid="stAppViewContainer"] > section {
+
     height: 100vh !important;
     max-height: 100vh !important;
+
     overflow: hidden !important;
 }
+
+
 section.main {
+
     height: 100vh !important;
     max-height: 100vh !important;
+
     overflow: hidden !important;
 }
 
-/* ===== HEADER STREAMLIT ===== */
-header[data-testid="stHeader"] { display: none !important; }
-footer { display: none !important; }
 
-/* ===== MAIN BLOCK ===== */
+/* =========================================================
+   HIDE STREAMLIT HEADER / FOOTER
+   ========================================================= */
+
+header[data-testid="stHeader"] {
+    display: none !important;
+}
+
+footer {
+    display: none !important;
+}
+
+
+/* =========================================================
+   MAIN BLOCK
+   ========================================================= */
+
 [data-testid="stAppViewBlockContainer"] {
-    height: 100vh !important;
-    max-height: 100vh !important;
+
     width: 100% !important;
     max-width: 100% !important;
+
+    height: 100vh !important;
+    max-height: 100vh !important;
+
     box-sizing: border-box !important;
-    padding: 12px 24px 12px 24px !important;
+
+    padding: 12px 24px 8px 24px !important;
+
     overflow: hidden !important;
+
     display: flex !important;
     flex-direction: column !important;
 }
 
-/* Direct child tidak shrink */
-[data-testid="stAppViewBlockContainer"] > div {
-    flex-shrink: 0;
-}
 
-/* Header baris atas */
-[data-testid="stAppViewBlockContainer"] > div:nth-child(1),
-[data-testid="stAppViewBlockContainer"] > div:nth-child(2),
-[data-testid="stAppViewBlockContainer"] > div:nth-child(3) {
-    flex-shrink: 0 !important;
-}
+/* =========================================================
+   CHAT + SOAL ROW
+   ========================================================= */
 
-/* ===== LAYOUT CHAT + SOAL ===== */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"] {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-}
+/*
+   Row yang berisi col_chat dan col_soal
+   harus mengambil seluruh ruang yang tersisa.
+*/
 
-/* ===== KOLOM ===== */
 [data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]
-> div[data-testid="column"] {
-    min-height: 0 !important;
-    height: 100% !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
+> div[data-testid="stHorizontalBlock"] {
 
-/* Anak kolom tidak shrink */
-[data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]
-> div[data-testid="column"] > div {
-    flex-shrink: 0;
-}
-
-/* ===== CONTAINER SCROLL ===== */
-[data-testid="stVerticalBlockBorderWrapper"] {
     flex: 1 1 0 !important;
+
     min-height: 0 !important;
+
     height: auto !important;
-    max-height: none !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
-    width: 8px;
-}
-[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-thumb {
-    border-radius: 8px;
-    background: rgba(128,128,0,0.45);
-}
 
-/* ===== CHAT INPUT ===== */
-[data-testid="stChatInput"] {
-    position: sticky !important;
-    bottom: 0 !important;
-    z-index: 100 !important;
-    flex-shrink: 0 !important;
-    width: 100% !important;
-    margin-top: 8px !important;
-    padding-bottom: 4px !important;
-    background: var(--background-color) !important;
-}
-[data-testid="stChatInput"] > div { width: 100% !important; }
-
-/* ===== CHAT / SOAL COLUMN ===== */
-.chat-column,
-.quiz-column {
-    min-height: 0 !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
     overflow: hidden !important;
+
+    align-items: stretch !important;
 }
 
-/* ===== CEGAH AUTO SCROLL ===== */
-* { overflow-anchor: none !important; }
+
+/* =========================================================
+   COLUMN
+   ========================================================= */
+
+[data-testid="stHorizontalBlock"]
+> div[data-testid="column"] {
+
+    min-height: 0 !important;
+
+    height: 100% !important;
+
+    overflow: hidden !important;
+
+    display: flex !important;
+
+    flex-direction: column !important;
+
+    box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   COLUMN CONTENT
+   ========================================================= */
+
+[data-testid="stHorizontalBlock"]
+> div[data-testid="column"]
+> div {
+
+    min-height: 0 !important;
+}
+
+
+/* =========================================================
+   CONTAINER CHAT / SOAL
+   ========================================================= */
+
+/*
+   Container border menjadi area scroll.
+
+   Tinggi mengikuti ruang yang tersedia.
+*/
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+
+    flex: 1 1 0 !important;
+
+    min-height: 0 !important;
+
+    height: auto !important;
+
+    max-height: none !important;
+
+    overflow-y: auto !important;
+
+    overflow-x: hidden !important;
+
+    box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
+
+[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
+
+    width: 7px;
+}
+
+
+[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-thumb {
+
+    border-radius: 10px;
+
+    background: rgba(120, 120, 120, 0.45);
+}
+
+
+[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-track {
+
+    background: transparent;
+}
+
+
+/* =========================================================
+   CHAT INPUT
+   ========================================================= */
+
+/*
+   PENTING:
+
+   chat_input SEKARANG berada di luar columns.
+
+   Kita biarkan Streamlit menempelkan input
+   di bagian bawah viewport.
+*/
+
+[data-testid="stChatInput"] {
+
+    position: fixed !important;
+
+    left: 24px !important;
+
+    right: 24px !important;
+
+    bottom: 8px !important;
+
+    width: auto !important;
+
+    max-width: none !important;
+
+    z-index: 999 !important;
+
+    margin: 0 !important;
+
+    padding: 0 !important;
+
+    box-sizing: border-box !important;
+}
+
+
+/* Inner chat input */
+
+[data-testid="stChatInput"] > div {
+
+    width: 100% !important;
+
+    max-width: none !important;
+
+    box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   BERIKAN RUANG UNTUK CHAT INPUT
+   ========================================================= */
+
+/*
+   Area Chat + Soal tidak boleh berada di belakang
+   chat input.
+*/
+
+[data-testid="stAppViewBlockContainer"] {
+
+    padding-bottom: 80px !important;
+}
+
+
+/* =========================================================
+   PREVENT AUTO SCROLL
+   ========================================================= */
+
+* {
+
+    overflow-anchor: none !important;
+}
+
 </style>
 """
 
@@ -521,6 +672,286 @@ footer { display: none !important; }
 # CHATBOT
 # ============================================================
 def render_chat():
+
+    st.markdown(
+        CSS_CHAT,
+        unsafe_allow_html=True
+    )
+
+    materi_text = st.session_state.get(
+        "materi_text"
+    )
+
+    quiz_data = st.session_state.get(
+        "quiz_data"
+    )
+
+    has_quiz = bool(
+        quiz_data
+        and quiz_data.get("soal_list")
+    )
+
+
+    # ========================================================
+    # HEADER
+    # ========================================================
+
+    top_left, top_right = st.columns(
+        [1, 3]
+    )
+
+    with top_left:
+
+        if st.button(
+            "⬅ Kembali ke Menu Utama"
+        ):
+
+            st.session_state.page = "home"
+
+            st.rerun()
+
+
+    with top_right:
+
+        st.caption(
+            f"📄 Materi aktif: "
+            f"**{st.session_state.get('materi_filename') or '-'}**"
+        )
+
+
+    st.markdown(
+        "### 🎓 Chatbot Soal Latihan"
+    )
+
+
+    if not materi_text:
+
+        st.warning(
+            "Materi belum diupload."
+        )
+
+        if st.button(
+            "Ke Halaman Upload"
+        ):
+
+            st.session_state.page = "upload"
+
+            st.rerun()
+
+        return
+
+
+    # ========================================================
+    # LAYOUT CHAT + SOAL
+    # ========================================================
+
+    if has_quiz:
+
+        col_chat, col_soal = st.columns(
+            [1, 1],
+            gap="medium"
+        )
+
+    else:
+
+        col_chat = st.container()
+
+        col_soal = None
+
+
+    # ========================================================
+    # KOLOM CHAT
+    # ========================================================
+
+    with col_chat:
+
+        st.markdown(
+            "#### 💬 Chat"
+        )
+
+        st.caption(
+            "Ajukan pertanyaan berdasarkan materi, "
+            "atau ketik **'buat soal'** untuk "
+            "dibuatkan soal latihan."
+        )
+
+
+        # ----------------------------------------------------
+        # CHAT SCROLL
+        # ----------------------------------------------------
+
+        chat_box = st.container(
+            border=True
+        )
+
+        with chat_box:
+
+            if not st.session_state.messages:
+
+                st.caption(
+                    "_Belum ada pesan. Mulai dengan "
+                    "mengetik pertanyaan di bawah._"
+                )
+
+
+            for m in st.session_state.messages:
+
+                with st.chat_message(
+                    m["role"]
+                ):
+
+                    st.markdown(
+                        m["content"]
+                    )
+
+
+    # ========================================================
+    # KOLOM SOAL
+    # ========================================================
+
+    if col_soal is not None:
+
+        with col_soal:
+
+            st.markdown(
+                "#### 📝 Soal"
+            )
+
+
+            # ------------------------------------------------
+            # SOAL SCROLL
+            # ------------------------------------------------
+
+            soal_box = st.container(
+                border=True
+            )
+
+            with soal_box:
+
+                render_quiz_form()
+
+
+    # ========================================================
+    # CHAT INPUT
+    #
+    # PENTING:
+    # DI LUAR col_chat DAN col_soal
+    # ========================================================
+
+    user_input = st.chat_input(
+        "Ketik pesan Anda di sini..."
+    )
+
+
+    # ========================================================
+    # PROCESS CHAT
+    # ========================================================
+
+    if user_input:
+
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": user_input
+            }
+        )
+
+        normalized = (
+            user_input
+            .strip()
+            .lower()
+        )
+
+
+        with st.spinner(
+            "Sedang memproses..."
+        ):
+
+            # ================================================
+            # BUAT SOAL
+            # ================================================
+
+            if is_soal_trigger(
+                normalized
+            ):
+
+                quiz_data = generate_quiz(
+                    materi_text
+                )
+
+                st.session_state.quiz_data = (
+                    quiz_data
+                )
+
+                st.session_state.current_answer_text = (
+                    quiz_data["answer_text"]
+                )
+
+                st.session_state.quiz_result = None
+
+                st.session_state.quiz_version += 1
+
+                topik = (
+                    quiz_data.get("topik")
+                    or ""
+                )
+
+                judul = (
+                    f" - {topik}"
+                    if topik
+                    else ""
+                )
+
+                bot_reply = (
+                    f"✅ Soal latihan{judul} "
+                    "sudah dibuat! Silahkan jawab "
+                    "lewat panel **Soal** di sebelah kanan."
+                )
+
+
+            # ================================================
+            # KUNCI JAWABAN
+            # ================================================
+
+            elif is_kunci_jawaban_request(
+                normalized
+            ):
+
+                if st.session_state.current_answer_text:
+
+                    bot_reply = (
+                        st.session_state.current_answer_text
+                    )
+
+                else:
+
+                    bot_reply = (
+                        "Soal belum dibuat. "
+                        "Ketik **'buat soal'** dulu."
+                    )
+
+
+            # ================================================
+            # CHAT NORMAL
+            # ================================================
+
+            else:
+
+                bot_reply = grounded_chat(
+                    materi_text,
+                    st.session_state.messages,
+                    user_input
+                )
+
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": bot_reply
+            }
+        )
+
+        st.rerun()
     st.markdown(CSS_CHAT, unsafe_allow_html=True)
 
     materi_text = st.session_state.get("materi_text")
