@@ -1,0 +1,7 @@
+Taruh file PDF materi "Budaya Adat Minangkabau" di folder ini
+dengan nama: budaya_minangkabau.pdf
+
+Path lengkap yang dibaca oleh app.py:
+materi/budaya_minangkabau.pdf
+
+Kalau mau ganti nama file, ubah juga variabel MATERI_PDF_PATH di app.py.
