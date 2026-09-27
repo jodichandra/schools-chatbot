@@ -376,25 +376,36 @@ def render_upload():
 
 
 # ============================================================
-# CSS KUNCI: MATIKAN SCROLL HALAMAN, SCROLL HANYA DI DALAM CONTAINER
+# CSS: 
+# - scroll halaman dimatikan
+# - default: layout centered (chat normal, tidak full width)
+# - saat ada soal: expand block-container jadi full width
 # ============================================================
-CUSTOM_CSS = """
+CUSTOM_CSS_BASE = """
 <style>
-/* 1. Matikan scroll di halaman aplikasi utama (biar tidak ada scroll ganda) */
-html, body, [data-testid="stAppViewContainer"], .stApp {
+/* 1. Matikan scroll di halaman aplikasi (biar tidak ada scroll ganda) */
+html, body {
     overflow: hidden !important;
     height: 100vh !important;
 }
-
-/* 2. Area konten utama juga di-lock */
+[data-testid="stAppViewContainer"], .stApp {
+    overflow: hidden !important;
+    height: 100vh !important;
+}
 section.main, [data-testid="stAppViewContainer"] > section {
     overflow: hidden !important;
     height: 100vh !important;
 }
 
-/* 3. Blok konten utama (tempat column berada) isi tinggi layar */
+/* 2. Header Streamlit disembunyikan biar rapi */
+header[data-testid="stHeader"] {
+    background: transparent !important;
+    height: 0 !important;
+}
+
+/* 3. Block container utama: isi tinggi layar, jangan overflow */
 .main .block-container {
-    padding-top: 3rem !important;
+    padding-top: 2rem !important;
     padding-bottom: 1rem !important;
     height: 100vh !important;
     max-height: 100vh !important;
@@ -403,15 +414,14 @@ section.main, [data-testid="stAppViewContainer"] > section {
     flex-direction: column !important;
 }
 
-/* 4. Baris kolom (st.columns) juga harus flex agar tinggi bisa 100% */
+/* 4. Baris kolom (st.columns) mengisi sisa ruang */
 .main .block-container > div[data-testid="stHorizontalBlock"] {
     flex: 1 1 auto !important;
     min-height: 0 !important;
-    height: 100% !important;
     overflow: hidden !important;
 }
 
-/* 5. Setiap kolom di dalam baris juga flex column + overflow hidden */
+/* 5. Kolom dalam baris: flex column, overflow hidden */
 .main .block-container > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
     height: 100% !important;
     min-height: 0 !important;
@@ -420,8 +430,7 @@ section.main, [data-testid="stAppViewContainer"] > section {
     overflow: hidden !important;
 }
 
-/* 6. Container scroll (chat & soal) -> tinggi mengisi sisa ruang,
-      tapi tetap punya scroll internal sendiri */
+/* 6. Container scroll (chat & soal): isi sisa ruang, scroll internal */
 .main div[data-testid="stVerticalBlockBorderWrapper"] {
     flex: 1 1 auto !important;
     min-height: 0 !important;
@@ -429,11 +438,22 @@ section.main, [data-testid="stAppViewContainer"] > section {
     overflow-x: hidden !important;
 }
 
-/* 7. Chat input tetap menempel di bawah kolom chat */
+/* 7. Chat input tetap di bawah kolom */
 .main div[data-testid="stChatInput"] {
     flex-shrink: 0 !important;
-    position: relative !important;
     margin-top: 8px !important;
+}
+</style>
+"""
+
+
+# CSS tambahan: saat ada soal, lebarkan block-container jadi full width
+CUSTOM_CSS_WIDE = """
+<style>
+.main .block-container {
+    max-width: 100% !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
 }
 </style>
 """
@@ -443,7 +463,17 @@ section.main, [data-testid="stAppViewContainer"] > section {
 # HALAMAN: CHATBOT
 # ============================================================
 def render_chat():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    materi_text = st.session_state.get("materi_text")
+
+    # Cek dulu apakah ada soal, untuk menentukan CSS layout
+    quiz_data = st.session_state.get("quiz_data")
+    has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
+
+    # CSS dasar selalu aktif
+    st.markdown(CUSTOM_CSS_BASE, unsafe_allow_html=True)
+    # CSS wide hanya saat ada soal (biar 2 kolom muat)
+    if has_quiz:
+        st.markdown(CUSTOM_CSS_WIDE, unsafe_allow_html=True)
 
     # ---------- HEADER ----------
     top_left, top_right = st.columns([1, 3])
@@ -456,7 +486,6 @@ def render_chat():
 
     st.markdown("### 🎓 Chatbot Soal Latihan")
 
-    materi_text = st.session_state.get("materi_text")
     if not materi_text:
         st.warning("Materi belum diupload. Silahkan upload materi terlebih dahulu.")
         if st.button("Ke Halaman Upload"):
@@ -464,12 +493,9 @@ def render_chat():
             st.rerun()
         return
 
-    quiz_data = st.session_state.get("quiz_data")
-    has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
-
     # ---------- LAYOUT ----------
-    # Belum ada soal  -> 1 kolom full width
-    # Sudah ada soal  -> 2 kolom seimbang (chat kiri, soal kanan)
+    # Belum ada soal  -> 1 kolom (chat normal, centered, tidak full width)
+    # Sudah ada soal  -> 2 kolom seimbang
     if has_quiz:
         col_chat, col_soal = st.columns([1, 1], gap="medium")
     else:
@@ -486,8 +512,6 @@ def render_chat():
             "dibuatkan soal latihan."
         )
 
-        # Container chat: height di-set besar (mengisi ruang).
-        # CSS di atas akan override ini agar tingginya mengikuti sisa layar.
         chat_box = st.container(height=520, border=True)
         with chat_box:
             if not st.session_state.messages:
@@ -496,7 +520,6 @@ def render_chat():
                 with st.chat_message(m["role"]):
                     st.markdown(m["content"])
 
-        # Chat input di bawah kolom (di luar scroll container).
         user_input = st.chat_input("Ketik pesan Anda di sini...")
 
         if user_input:
@@ -549,10 +572,12 @@ def render_chat():
 # MAIN
 # ============================================================
 def main():
+    # Gunakan "centered" agar saat belum ada soal, chat tampil normal
+    # (tidak full width). Saat ada soal, CSS akan melebarkan block-container.
     st.set_page_config(
         page_title="Schoool Question Generated",
         page_icon="📚",
-        layout="wide",
+        layout="centered",
         initial_sidebar_state="collapsed",
     )
     init_state()
