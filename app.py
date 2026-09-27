@@ -177,9 +177,9 @@ MATERI:
         key=lambda k: k.get("nomor", 0)
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # TEXT SOAL
-    # ========================================================
+    # --------------------------------------------------------
 
     judul_soal = (
         f"📝 **Soal Latihan - {topik}**"
@@ -209,9 +209,9 @@ MATERI:
 
     quiz_text = "\n".join(quiz_lines).strip()
 
-    # ========================================================
+    # --------------------------------------------------------
     # TEXT KUNCI JAWABAN
-    # ========================================================
+    # --------------------------------------------------------
 
     answer_lines = [
         "🔑 **Kunci Jawaban**",
@@ -219,7 +219,6 @@ MATERI:
     ]
 
     for kunci in kunci_list:
-
         line = (
             f"- **{kunci.get('nomor')}.** "
             f"{kunci.get('jawaban')}"
@@ -329,9 +328,7 @@ MATERI:
     if not data.get("relevan"):
         return OUT_OF_CONTEXT_MESSAGE
 
-    jawaban = (
-        data.get("jawaban") or ""
-    ).strip()
+    jawaban = (data.get("jawaban") or "").strip()
 
     return (
         jawaban
@@ -359,9 +356,7 @@ def render_quiz_form():
         0
     )
 
-    st.markdown(
-        "#### ✏️ Jawab Soal di Bawah Ini"
-    )
+    st.markdown("#### ✏️ Jawab Soal di Bawah Ini")
 
     with st.form(
         key=f"quiz_form_{version}"
@@ -458,7 +453,6 @@ def render_quiz_form():
     if st.session_state.get("quiz_result"):
 
         st.markdown("---")
-
         st.markdown(
             st.session_state.quiz_result
         )
@@ -725,16 +719,16 @@ footer {
 }
 
 /* ==========================================================
-   CHAT + SOAL AREA
+   AREA CHAT + SOAL
    ========================================================== */
 
 .st-key-chat_layout {
     flex: 0 0 auto !important;
-    width: 100% !important;
     height: calc(100vh - 145px) !important;
     min-height: 0 !important;
     max-height: calc(100vh - 145px) !important;
     overflow: hidden !important;
+    width: 100% !important;
 }
 
 /* ==========================================================
@@ -742,7 +736,6 @@ footer {
    ========================================================== */
 
 .st-key-chat_layout [data-testid="stHorizontalBlock"] {
-    width: 100% !important;
     height: 100% !important;
     min-height: 0 !important;
     max-height: 100% !important;
@@ -751,7 +744,7 @@ footer {
 }
 
 /* ==========================================================
-   COLUMNS
+   KOLOM CHAT + SOAL
    ========================================================== */
 
 .st-key-chat_layout [data-testid="column"] {
@@ -765,36 +758,25 @@ footer {
 }
 
 /* ==========================================================
-   COLUMN INNER WRAPPER
+   WRAPPER DALAM KOLOM
    ========================================================== */
 
 .st-key-chat_layout [data-testid="column"] > div {
     min-height: 0 !important;
-    max-height: 100% !important;
 }
 
 /* ==========================================================
-   BORDER CONTAINER
+   CONTAINER BORDER CHAT / SOAL
    ========================================================== */
 
 .st-key-chat_layout
 [data-testid="stVerticalBlockBorderWrapper"] {
-    flex: 1 1 auto !important;
+    flex: 1 1 0 !important;
     min-height: 0 !important;
+    height: 0 !important;
     max-height: 100% !important;
-    height: auto !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
-    box-sizing: border-box !important;
-}
-
-/* ==========================================================
-   BORDER CONTAINER INNER
-   ========================================================== */
-
-.st-key-chat_layout
-[data-testid="stVerticalBlockBorderWrapper"] > div {
-    min-height: 0 !important;
     box-sizing: border-box !important;
 }
 
@@ -802,18 +784,15 @@ footer {
    SCROLLBAR
    ========================================================== */
 
-.st-key-chat_layout
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
     width: 7px;
 }
 
-.st-key-chat_layout
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-thumb {
     border-radius: 10px;
     background: rgba(120, 120, 120, 0.45);
 }
 
-.st-key-chat_layout
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-track {
     background: transparent;
 }
@@ -888,7 +867,7 @@ def render_chat():
     )
 
     # ========================================================
-    # HEADER
+    # HEADER FIXED
     # ========================================================
 
     with st.container(
@@ -943,7 +922,18 @@ def render_chat():
         return
 
     # ========================================================
-    # CHAT + SOAL
+    # LAYOUT CHAT + SOAL
+    #
+    # PENTING:
+    # Columns SELALU dibuat.
+    #
+    # Jangan pernah:
+    #
+    # if has_quiz:
+    #     st.columns(...)
+    #
+    # Karena itu akan menyebabkan posisi Chat berubah
+    # ketika quiz muncul.
     # ========================================================
 
     with st.container(
@@ -956,7 +946,7 @@ def render_chat():
         )
 
         # ====================================================
-        # CHAT
+        # CHAT COLUMN
         # ====================================================
 
         with col_chat:
@@ -995,7 +985,7 @@ def render_chat():
                         )
 
         # ====================================================
-        # SOAL
+        # SOAL COLUMN
         # ====================================================
 
         with col_soal:
@@ -1022,7 +1012,7 @@ def render_chat():
                 )
 
     # ========================================================
-    # CHAT INPUT
+    # CHAT INPUT FIXED
     # ========================================================
 
     user_input = st.chat_input(
