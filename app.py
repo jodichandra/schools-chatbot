@@ -1,12 +1,14 @@
 """
 School Question Generated For 3 SD
-Final Project - Chatbot Pembuat Soal Latihan Berbasis Materi PDF (OpenAI API)
+Final Project - Chatbot Pembuat Soal Latihan Berbasis Materi PDF Upload User (OpenAI API)
 
-Cara pakai singkat:
-1. Taruh file PDF materi di folder materi/ (lihat MATERI_PDF_PATH di bawah)
-2. Isi MATERI_LINK dengan link akses materi (misal Google Drive)
-3. Isi OPENAI_API_KEY di .streamlit/secrets.toml
-4. Jalankan: streamlit run app.py
+Topik/materi TIDAK dikunci ke satu mata pelajaran tertentu.
+Soal dan jawaban dibuat berdasarkan isi PDF yang diupload user, apa pun topiknya.
+
+Alur:
+1. Halaman Home -> (Upload Materi)
+2. Halaman Upload -> user upload PDF materi sendiri (maksimal 5 halaman)
+3. Halaman Chat -> tanya jawab / minta dibuatkan soal berdasarkan materi yang diupload
 """
 
 import os
@@ -21,19 +23,12 @@ from openai import OpenAI
 # KONFIGURASI
 # ============================================================
 MODEL_NAME = "gpt-4o-mini"
+MAX_PDF_PAGES = 5
 
-# Path file PDF materi Muatan Lokal (taruh file kamu di sini)
-MATERI_PDF_PATH = os.path.join("materi", "budaya_minangkabau.pdf")
-
-# Link yang muncul di tombol "akses materi" pada halaman chatbot
-MATERI_LINK = "https://drive.google.com/file/d/1vEwpOnOTbYez3_VW8mWlN7q5hB6j0vot/view?usp=sharing"  # TODO: ganti dengan link materi asli
-
-TEMPLATE_GREETING = (
-    "Hallo saya chatbot khusus untuk membuat soal berdasarkan pelajaran yang "
-    "dipilih..silahkan ketik ya agar saya bisa membuat soal untuk anda?"
-)
-
-YA_VARIANTS = {"ya", "iya", "y", "ok", "oke", "siap", "boleh", "mau", "yes"}
+SOAL_TRIGGER_KEYWORDS = {
+    "ya", "iya", "y", "ok", "oke", "siap", "boleh", "mau", "yes",
+    "buat soal", "buatkan soal", "soal latihan", "kuis", "quiz",
+}
 
 
 # ============================================================
@@ -59,33 +54,45 @@ def get_openai_client() -> OpenAI:
 
 
 # ============================================================
-# UTIL: BACA PDF MATERI
+# UTIL: BACA PDF YANG DIUPLOAD USER
 # ============================================================
-@st.cache_data(show_spinner=False)
-def load_materi_text(pdf_path: str) -> str:
-    text_parts = []
-    with pdfplumber.open(pdf_path) as pdf:
+def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
+    """
+    Membaca PDF yang diupload user.
+    Return (materi_text, num_pages) jika valid,
+    atau (None, num_pages) jika melebihi batas halaman.
+    """
+    uploaded_file.seek(0)
+    with pdfplumber.open(uploaded_file) as pdf:
+        num_pages = len(pdf.pages)
+        if num_pages > max_pages:
+            return None, num_pages
+
+        text_parts = []
         for page in pdf.pages:
             t = page.extract_text()
             if t:
                 text_parts.append(t)
-    return "\n".join(text_parts)
+
+    return "\n".join(text_parts), num_pages
 
 
 # ============================================================
-# GENERATE SOAL (dipisah dari kunci jawaban)
+# GENERATE SOAL (topik mengikuti isi PDF, TIDAK di-hardcode)
 # ============================================================
 def generate_quiz(materi_text: str, n_soal: int = 5):
     client = get_openai_client()
 
     system_prompt = f"""Kamu adalah guru SD kelas 3 yang membuat soal latihan.
-Gunakan HANYA informasi dari MATERI di bawah ini, jangan menambah informasi dari luar materi.
+Topik soal HARUS mengikuti isi MATERI PDF yang diberikan di bawah ini, apa pun topiknya.
+Gunakan HANYA informasi dari MATERI tersebut, jangan menambah informasi dari luar materi.
 Bahasa harus sederhana, sesuai untuk anak kelas 3 SD.
 
 Buat {n_soal} soal pilihan ganda (A-D) berdasarkan MATERI berikut.
 
 Balas HANYA dalam format JSON persis seperti ini, tanpa teks tambahan apa pun:
 {{
+  "topik": "judul singkat topik materi ini",
   "soal": [
     {{"nomor": 1, "pertanyaan": "...", "pilihan": {{"A": "...", "B": "...", "C": "...", "D": "..."}}}}
   ],
@@ -110,13 +117,14 @@ MATERI:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        # fallback kalau model tidak mengembalikan JSON valid
-        return raw, "Kunci jawaban tidak tersedia karena format soal tidak sesuai. Coba ketik 'ya' lagi."
+        return raw, "Kunci jawaban tidak tersedia karena format soal tidak sesuai. Coba minta buat soal lagi."
 
-    soal_list = data.get("soal", [])
-    kunci_list = data.get("kunci_jawaban", [])
+    topik = data.get("topik", "").strip()
+    soal_list = sorted(data.get("soal", []), key=lambda s: s.get("nomor", 0))
+    kunci_list = sorted(data.get("kunci_jawaban", []), key=lambda k: k.get("nomor", 0))
 
-    quiz_lines = ["📝 **Soal Latihan - BAM**", ""]
+    judul_soal = f"📝 **Soal Latihan - {topik}**" if topik else "📝 **Soal Latihan**"
+    quiz_lines = [judul_soal, ""]
     for s in soal_list:
         quiz_lines.append(f"**{s.get('nomor')}. {s.get('pertanyaan')}**")
         pilihan = s.get("pilihan", {})
@@ -137,18 +145,19 @@ MATERI:
 
 
 # ============================================================
-# CHAT UMUM (tetap dibatasi hanya pada materi PDF)
+# CHAT UMUM (topik mengikuti isi PDF, dibatasi hanya pada materi)
 # ============================================================
 def grounded_chat(materi_text: str, history: list, user_input: str) -> str:
     client = get_openai_client()
 
-    system_prompt = f"""Kamu adalah chatbot ramah untuk siswa kelas 3 SD dengan topik
-'Budaya Adat Minangkabau'.
+    system_prompt = f"""Kamu adalah chatbot ramah untuk siswa kelas 3 SD.
+Topik chatbot ini MENGIKUTI isi MATERI PDF yang diupload user di bawah ini, apa pun isinya
+(bisa pelajaran apa saja, bukan topik tertentu yang tetap).
 
 ATURAN PENTING:
 1. Kamu HANYA boleh menjawab berdasarkan MATERI di bawah ini.
 2. Jika pertanyaan user tidak berkaitan dengan materi ini, tolak dengan sopan
-   dan arahkan user untuk mengetik 'ya' agar dibuatkan soal latihan.
+   dan arahkan user untuk meminta dibuatkan soal latihan dari materi ini.
 3. Gunakan bahasa sederhana dan ramah, sesuai untuk anak kelas 3 SD.
 
 MATERI:
@@ -172,16 +181,22 @@ MATERI:
 # STATE HELPERS
 # ============================================================
 def init_state():
-    st.session_state.setdefault("page", "home")
+    st.session_state.setdefault("page", "home")            # home -> upload -> chat
     st.session_state.setdefault("messages", [])
-    st.session_state.setdefault("stage", "initial")  # initial -> awaiting_ya -> quiz_shown
     st.session_state.setdefault("current_answer_text", None)
+    st.session_state.setdefault("materi_text", None)
+    st.session_state.setdefault("materi_filename", None)
 
 
 def reset_chat_state():
     st.session_state.messages = []
-    st.session_state.stage = "initial"
     st.session_state.current_answer_text = None
+
+
+def reset_materi_state():
+    st.session_state.materi_text = None
+    st.session_state.materi_filename = None
+    reset_chat_state()
 
 
 # ============================================================
@@ -189,23 +204,55 @@ def reset_chat_state():
 # ============================================================
 def render_home():
     st.title("📚 Schoool Question Generated")
-    st.write("Selamat datang! Pilih mata pelajaran untuk membuat soal latihan.")
+    st.write("Selamat datang! Pilih menu untuk membuat soal latihan.")
 
     st.subheader("Muatan Lokal")
-    if st.button("🏯 Budaya Adat Minangkabau", use_container_width=True, type="primary"):
-        reset_chat_state()
-        st.session_state.page = "chat"
+    st.caption("Upload materi PDF-mu sendiri, soal dan jawaban akan mengikuti isi materi tersebut.")
+    if st.button("📄 Upload Materi & Buat Soal", use_container_width=True, type="primary"):
+        reset_materi_state()
+        st.session_state.page = "upload"
         st.rerun()
 
-    st.divider()
+# ============================================================
+# HALAMAN: UPLOAD MATERI
+# ============================================================
+def render_upload():
+    if st.button("⬅ Kembali ke Menu Utama"):
+        st.session_state.page = "home"
+        st.rerun()
 
-    st.subheader("Daftar Pelajaran")
-    cols = st.columns(3)
-    coming_soon_subjects = ["Bahasa Inggris", "Bahasa Indonesia", "Matematika"]
-    for col, subject in zip(cols, coming_soon_subjects):
-        with col:
-            st.button(f"🔒 {subject}", disabled=True, use_container_width=True)
-            st.caption("Coming Soon")
+    st.title("📄 Upload Materi")
+    st.info(
+        "Sebelum memulai, silahkan upload materi terlebih dahulu (format PDF). "
+        "Topik soal akan mengikuti isi materi yang kamu upload, apa pun topiknya.\n\n"
+        f"⚠️ Batasan saat ini: maksimal **{MAX_PDF_PAGES} halaman**. "
+        "Jika PDF lebih dari itu, upload akan ditolak."
+    )
+
+    uploaded_file = st.file_uploader("Upload materi (PDF)", type=["pdf"])
+
+    if uploaded_file is not None:
+        with st.spinner("Memeriksa dan membaca materi..."):
+            materi_text, num_pages = read_uploaded_pdf(uploaded_file, MAX_PDF_PAGES)
+
+        if materi_text is None:
+            st.error(
+                f"PDF yang kamu upload memiliki **{num_pages} halaman**. "
+                f"Maksimal yang diizinkan saat ini adalah **{MAX_PDF_PAGES} halaman**. "
+                "Silahkan upload ulang dengan PDF yang lebih pendek."
+            )
+        elif not materi_text.strip():
+            st.error(
+                "Tidak ada teks yang bisa dibaca dari PDF ini "
+                "(kemungkinan PDF berupa hasil scan/gambar). Coba upload PDF lain."
+            )
+        else:
+            st.session_state.materi_text = materi_text
+            st.session_state.materi_filename = uploaded_file.name
+            reset_chat_state()
+            st.success(f"Materi '{uploaded_file.name}' berhasil diupload ({num_pages} halaman).")
+            st.session_state.page = "chat"
+            st.rerun()
 
 
 # ============================================================
@@ -218,20 +265,22 @@ def render_chat():
             st.session_state.page = "home"
             st.rerun()
     with top_right:
-        st.link_button("🔗 Klik di sini untuk akses materi", MATERI_LINK)
+        st.caption(f"📄 Materi aktif: **{st.session_state.get('materi_filename') or '-'}**")
 
-    st.caption("Silahkan klik link di atas untuk akses materi.")
-    st.title("🎓 Chatbot Soal - BAM")
+    st.title("🎓 Chatbot Soal Latihan")
 
-    # Load materi PDF sekali saja (di-cache)
-    if not os.path.exists(MATERI_PDF_PATH):
-        st.error(
-            f"File materi tidak ditemukan di `{MATERI_PDF_PATH}`. "
-            "Silahkan tambahkan file PDF materi terlebih dahulu di folder `materi/`."
-        )
-        st.stop()
+    materi_text = st.session_state.get("materi_text")
+    if not materi_text:
+        st.warning("Materi belum diupload. Silahkan upload materi terlebih dahulu.")
+        if st.button("Ke Halaman Upload"):
+            st.session_state.page = "upload"
+            st.rerun()
+        return
 
-    materi_text = load_materi_text(MATERI_PDF_PATH)
+    st.info(
+        "Silahkan ajukan pertanyaan atau minta dibuatkan soal berdasarkan "
+        "materi yang diberikan. Ketik **'kunci jawaban'** untuk melihat jawabannya."
+    )
 
     # Tampilkan riwayat chat
     for m in st.session_state.messages:
@@ -242,7 +291,6 @@ def render_chat():
     if not user_input:
         return
 
-    # Tampilkan pesan user
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
@@ -252,25 +300,20 @@ def render_chat():
     with st.chat_message("assistant"):
         with st.spinner("Sedang memproses..."):
 
-            if st.session_state.stage == "initial":
-                bot_reply = TEMPLATE_GREETING
-                st.session_state.stage = "awaiting_ya"
-
-            elif st.session_state.stage == "awaiting_ya" and normalized in YA_VARIANTS:
+            if any(kw in normalized for kw in SOAL_TRIGGER_KEYWORDS):
                 quiz_text, answer_text = generate_quiz(materi_text)
                 st.session_state.current_answer_text = answer_text
                 bot_reply = (
                     f"{quiz_text}\n\n"
                     "📌 Jika ingin mengetahui jawabannya, silahkan ketik **'kunci jawaban'**."
                 )
-                st.session_state.stage = "quiz_shown"
 
             elif "kunci" in normalized and "jawaban" in normalized:
                 if st.session_state.current_answer_text:
                     bot_reply = st.session_state.current_answer_text
                 else:
                     bot_reply = (
-                        "Soal belum dibuat. Ketik **'ya'** terlebih dahulu untuk "
+                        "Soal belum dibuat. Ketik **'buat soal'** terlebih dahulu untuk "
                         "membuat soal latihan."
                     )
 
@@ -289,8 +332,11 @@ def main():
     st.set_page_config(page_title="Schoool Question Generated", page_icon="📚")
     init_state()
 
-    if st.session_state.page == "home":
+    page = st.session_state.page
+    if page == "home":
         render_home()
+    elif page == "upload":
+        render_upload()
     else:
         render_chat()
 
