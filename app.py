@@ -432,7 +432,7 @@ footer {
     height: 100vh !important;
     max-height: 100vh !important;
     box-sizing: border-box !important;
-    padding: 12px 24px 85px 24px !important;
+    padding: 4px 24px 85px 24px !important;
     overflow: hidden !important;
     display: flex !important;
     flex-direction: column !important;
@@ -476,8 +476,8 @@ footer {
 }
 [data-testid="stChatInput"] {
     position: fixed !important;
-    left: 24px !important;
-    right: 24px !important;
+    left: 5.75vw !important;
+    right: 5.75vw !important;
     bottom: 8px !important;
     width: auto !important;
     max-width: none !important;
@@ -490,6 +490,11 @@ footer {
     width: 100% !important;
     max-width: none !important;
     box-sizing: border-box !important;
+}
+[data-testid="stAppViewBlockContainer"] h1,
+[data-testid="stAppViewBlockContainer"] h2,
+[data-testid="stAppViewBlockContainer"] h3 {
+    margin-top: 0.2rem !important;
 }
 * {
     overflow-anchor: none !important;
