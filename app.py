@@ -33,9 +33,6 @@ from openai import OpenAI
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
 
-# Pola eksplisit untuk mendeteksi permintaan "buatkan soal".
-# Pakai word boundary (\b) supaya tidak ke-trigger oleh kata lain
-# yang kebetulan mengandung potongan huruf yang sama.
 SOAL_TRIGGER_PATTERNS = [
     r"\bbuat(?:kan)?\s+soal\b",
     r"\bbikin(?:kan)?\s+soal\b",
@@ -45,7 +42,6 @@ SOAL_TRIGGER_PATTERNS = [
     r"\bgenerate\s+soal\b",
 ]
 
-# Pola untuk mendeteksi permintaan "kunci jawaban"
 KUNCI_JAWABAN_PATTERN = r"\bkunci\s+jawaban\b"
 
 
@@ -83,11 +79,6 @@ def get_openai_client() -> OpenAI:
 # UTIL: BACA PDF YANG DIUPLOAD USER
 # ============================================================
 def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
-    """
-    Membaca PDF yang diupload user.
-    Return (materi_text, num_pages) jika valid,
-    atau (None, num_pages) jika melebihi batas halaman.
-    """
     uploaded_file.seek(0)
     with pdfplumber.open(uploaded_file) as pdf:
         num_pages = len(pdf.pages)
@@ -104,7 +95,7 @@ def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
 
 
 # ============================================================
-# GENERATE SOAL (topik mengikuti isi PDF, TIDAK di-hardcode)
+# GENERATE SOAL
 # ============================================================
 def generate_quiz(materi_text: str, n_soal: int = 5):
     client = get_openai_client()
@@ -183,7 +174,7 @@ MATERI:
 
 
 # ============================================================
-# CHAT UMUM (topik mengikuti isi PDF, dibatasi hanya pada materi)
+# CHAT UMUM
 # ============================================================
 OUT_OF_CONTEXT_MESSAGE = (
     "Maaf, pertanyaan itu tidak sesuai dengan materi yang diupload. "
@@ -198,13 +189,6 @@ CODE_REQUEST_MESSAGE = (
 
 
 def grounded_chat(materi_text: str, history: list, user_input: str) -> str:
-    """
-    Dua tahap dalam satu pemanggilan:
-    1. Model MENGKLASIFIKASI pertanyaan user: relevan dengan materi atau tidak,
-       dan apakah ini permintaan membuat kode program.
-    2. Keputusan akhir dipegang oleh KODE (bukan model), supaya penolakan
-       tidak bisa dilewati/dielaborasi oleh model.
-    """
     client = get_openai_client()
 
     system_prompt = f"""Kamu bertugas mengklasifikasikan dan menjawab pertanyaan siswa kelas 3 SD.
@@ -250,7 +234,6 @@ MATERI:
     except json.JSONDecodeError:
         return "Maaf, terjadi kendala saat memproses jawaban. Coba tanyakan lagi."
 
-    # Keputusan akhir dipegang di sini, BUKAN oleh teks bebas dari model.
     if data.get("permintaan_kode"):
         return CODE_REQUEST_MESSAGE
 
@@ -262,8 +245,7 @@ MATERI:
 
 
 # ============================================================
-# FORM KUIS INTERAKTIF (radio button A/B/C/D + penilaian otomatis)
-# Hanya dirender kalau quiz_data sudah ada.
+# FORM KUIS INTERAKTIF
 # ============================================================
 def render_quiz_form():
     quiz_data = st.session_state.get("quiz_data")
@@ -315,21 +297,26 @@ def render_quiz_form():
             + "\n".join(detail_lines)
         )
 
-        # Hasil disimpan terpisah dari riwayat chat, ditampilkan langsung di bawah form ini.
         st.session_state.quiz_result = hasil_text
-        # Tidak perlu st.rerun() — form submit sudah otomatis rerun.
 
-    # Tampilkan hasil (kalau ada) tepat di bawah form, di dalam container soal.
+    # Tampilkan hasil + tombol clear soal
     if st.session_state.get("quiz_result"):
         st.markdown("---")
         st.markdown(st.session_state.quiz_result)
+        st.markdown("")
+        if st.button("🗑️ Clear Soal", use_container_width=True, key="clear_soal_btn"):
+            st.session_state.quiz_data = None
+            st.session_state.quiz_result = None
+            st.session_state.current_answer_text = None
+            st.session_state.quiz_version += 1
+            st.rerun()
 
 
 # ============================================================
 # STATE HELPERS
 # ============================================================
 def init_state():
-    st.session_state.setdefault("page", "home")            # home -> upload -> chat
+    st.session_state.setdefault("page", "home")
     st.session_state.setdefault("messages", [])
     st.session_state.setdefault("current_answer_text", None)
     st.session_state.setdefault("materi_text", None)
@@ -411,9 +398,54 @@ def render_upload():
 
 
 # ============================================================
+# CSS KUSTOM: perbaiki tinggi & scroll container chat/soal
+# ============================================================
+CUSTOM_CSS = """
+<style>
+/* Tinggi container chat & soal dipaksa agar scroll independen */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    /* wrapper bawaan Streamlit untuk container(height=..., border=True) */
+}
+
+/* Container chat: tinggi tetap, scroll hanya di dalam bubble chat */
+.chat-scroll-container {
+    height: 60vh;
+    overflow-y: auto;
+    padding: 8px 12px;
+    border: 1px solid rgba(49, 51, 63, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Container soal: tinggi tetap, scroll hanya di dalam soal */
+.soal-scroll-container {
+    height: 68vh;
+    overflow-y: auto;
+    padding: 8px 12px;
+    border: 1px solid rgba(49, 51, 63, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Chat input tetap menempel di bawah kolom */
+div[data-testid="stChatInput"] {
+    position: sticky;
+    bottom: 0;
+    background: var(--background-color);
+    padding-top: 8px;
+    z-index: 10;
+}
+</style>
+"""
+
+
+# ============================================================
 # HALAMAN: CHATBOT
 # ============================================================
 def render_chat():
+    # ---------- CSS ----------
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
     # ---------- HEADER ----------
     top_left, top_right = st.columns([1, 3])
     with top_left:
@@ -433,14 +465,13 @@ def render_chat():
             st.rerun()
         return
 
-    # Tentukan apakah panel soal perlu ditampilkan.
-    # Panel soal HANYA muncul setelah user minta "buat soal".
+    # Panel soal hanya muncul setelah user minta "buat soal".
     quiz_data = st.session_state.get("quiz_data")
     has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
 
-    # ---------- LAYOUT ----------
-    # Sebelum ada soal  : chat full-width (1 kolom)
-    # Sesudah ada soal  : chat kiri + soal kanan (2 kolom seimbang)
+    # ---------- LAYOUT: full-width vs split ----------
+    # Chat normal       -> 1 kolom (full width)
+    # Setelah buat soal -> 2 kolom seimbang
     if has_quiz:
         col_chat, col_soal = st.columns([1, 1], gap="large")
     else:
@@ -457,11 +488,9 @@ def render_chat():
             "dibuatkan soal latihan."
         )
 
-        # Container scroll KHUSUS untuk bubble chat.
-        # - height tetap => bubble lama tidak mendorong input ke bawah
-        # - border=True  => batas visual jelas
-        # - scroll di dalam container ini TIDAK mempengaruhi container soal
-        chat_box = st.container(height=480, border=True)
+        # Container scroll KHUSUS bubble chat.
+        # Hanya bagian bubble chat yang scroll, input tetap di bawah.
+        chat_box = st.container(height=520, border=True)
         with chat_box:
             if not st.session_state.messages:
                 st.caption("_Belum ada pesan. Mulai dengan mengetik pertanyaan di bawah._")
@@ -469,7 +498,7 @@ def render_chat():
                 with st.chat_message(m["role"]):
                     st.markdown(m["content"])
 
-        # Chat input tetap menempel di bawah kolom chat.
+        # Chat input menempel di bawah kolom chat (di luar container scroll).
         user_input = st.chat_input("Ketik pesan Anda di sini...")
 
         if user_input:
@@ -513,8 +542,7 @@ def render_chat():
         with col_soal:
             st.subheader("📝 Soal")
 
-            # Container scroll KHUSUS untuk soal, terpisah dari chat.
-            # Scroll di sini TIDAK mempengaruhi container chat di kiri.
+            # Container scroll KHUSUS soal, terpisah dari chat.
             soal_box = st.container(height=560, border=True)
             with soal_box:
                 render_quiz_form()
