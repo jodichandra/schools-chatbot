@@ -1,6 +1,21 @@
 """
 School Question Generated For 3 SD
 Final Project - Chatbot Pembuat Soal Latihan Berbasis Materi PDF Upload User (OpenAI API)
+
+Topik/materi TIDAK dikunci ke satu mata pelajaran tertentu.
+Soal dan jawaban dibuat berdasarkan isi PDF yang diupload user, apa pun topiknya.
+
+Perilaku chatbot:
+- Pertanyaan biasa -> dijawab berdasarkan isi materi PDF saja (grounded chat)
+- Diminta membuat soal (kata kunci eksplisit) -> membuat soal + kunci jawaban
+- Pertanyaan di luar konteks materi -> ditolak dengan sopan
+- Diminta membuat kode program -> ditolak, chatbot hanya menjelaskan sesuai materi,
+  TIDAK menuliskan kode, walaupun materinya tentang koding
+
+Alur halaman:
+1. Home -> Upload Materi
+2. Upload -> user upload PDF materi sendiri (maksimal 5 halaman)
+3. Chat -> tanya jawab / minta dibuatkan soal berdasarkan materi yang diupload
 """
 
 import os
@@ -18,6 +33,9 @@ from openai import OpenAI
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
 
+# Pola eksplisit untuk mendeteksi permintaan "buatkan soal".
+# Pakai word boundary (\b) supaya tidak ke-trigger oleh kata lain
+# yang kebetulan mengandung potongan huruf yang sama.
 SOAL_TRIGGER_PATTERNS = [
     r"\bbuat(?:kan)?\s+soal\b",
     r"\bbikin(?:kan)?\s+soal\b",
@@ -27,6 +45,7 @@ SOAL_TRIGGER_PATTERNS = [
     r"\bgenerate\s+soal\b",
 ]
 
+# Pola untuk mendeteksi permintaan "kunci jawaban"
 KUNCI_JAWABAN_PATTERN = r"\bkunci\s+jawaban\b"
 
 
@@ -50,43 +69,54 @@ def get_openai_client() -> OpenAI:
     api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
     if not api_key:
-        st.error("OPENAI_API_KEY belum diatur.")
+        st.error(
+            "OPENAI_API_KEY belum diatur. Tambahkan di file "
+            "`.streamlit/secrets.toml` (lihat secrets.toml.example) atau "
+            "sebagai environment variable."
+        )
         st.stop()
 
     return OpenAI(api_key=api_key)
 
 
 # ============================================================
-# UTIL: BACA PDF
+# UTIL: BACA PDF YANG DIUPLOAD USER
 # ============================================================
 def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
+    """
+    Membaca PDF yang diupload user.
+    Return (materi_text, num_pages) jika valid,
+    atau (None, num_pages) jika melebihi batas halaman.
+    """
     uploaded_file.seek(0)
     with pdfplumber.open(uploaded_file) as pdf:
         num_pages = len(pdf.pages)
         if num_pages > max_pages:
             return None, num_pages
+
         text_parts = []
         for page in pdf.pages:
             t = page.extract_text()
             if t:
                 text_parts.append(t)
+
     return "\n".join(text_parts), num_pages
 
 
 # ============================================================
-# GENERATE SOAL
+# GENERATE SOAL (topik mengikuti isi PDF, TIDAK di-hardcode)
 # ============================================================
 def generate_quiz(materi_text: str, n_soal: int = 5):
     client = get_openai_client()
 
     system_prompt = f"""Kamu adalah guru SD kelas 3 yang membuat soal latihan.
 Topik soal HARUS mengikuti isi MATERI PDF yang diberikan di bawah ini, apa pun topiknya.
-Gunakan HANYA informasi dari MATERI tersebut.
+Gunakan HANYA informasi dari MATERI tersebut, jangan menambah informasi dari luar materi.
 Bahasa harus sederhana, sesuai untuk anak kelas 3 SD.
 
 Buat {n_soal} soal pilihan ganda (A-D) berdasarkan MATERI berikut.
 
-Balas HANYA dalam format JSON persis seperti ini:
+Balas HANYA dalam format JSON persis seperti ini, tanpa teks tambahan apa pun:
 {{
   "topik": "judul singkat topik materi ini",
   "soal": [
@@ -109,13 +139,16 @@ MATERI:
     )
 
     raw = response.choices[0].message.content
+
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return {
             "quiz_text": raw,
-            "answer_text": "Kunci jawaban tidak tersedia.",
-            "soal_list": [], "kunci_list": [], "topik": "",
+            "answer_text": "Kunci jawaban tidak tersedia karena format soal tidak sesuai. Coba minta buat soal lagi.",
+            "soal_list": [],
+            "kunci_list": [],
+            "topik": "",
         }
 
     topik = data.get("topik", "").strip()
@@ -150,7 +183,7 @@ MATERI:
 
 
 # ============================================================
-# CHAT UMUM
+# CHAT UMUM (topik mengikuti isi PDF, dibatasi hanya pada materi)
 # ============================================================
 OUT_OF_CONTEXT_MESSAGE = (
     "Maaf, pertanyaan itu tidak sesuai dengan materi yang diupload. "
@@ -159,22 +192,36 @@ OUT_OF_CONTEXT_MESSAGE = (
 
 CODE_REQUEST_MESSAGE = (
     "Maaf, saya hanya bisa menjelaskan sesuai isi materi. "
-    "Saya tidak bisa membuatkan kode program, aplikasi, atau halaman web apa pun."
+    "Saya tidak bisa membuatkan kode program, aplikasi, atau halaman web apa pun, "
+    "meskipun materinya tentang koding."
 )
 
 
 def grounded_chat(materi_text: str, history: list, user_input: str) -> str:
+    """
+    Dua tahap dalam satu pemanggilan:
+    1. Model MENGKLASIFIKASI pertanyaan user: relevan dengan materi atau tidak,
+       dan apakah ini permintaan membuat kode program.
+    2. Keputusan akhir dipegang oleh KODE (bukan model), supaya penolakan
+       tidak bisa dilewati/dielaborasi oleh model.
+    """
     client = get_openai_client()
 
     system_prompt = f"""Kamu bertugas mengklasifikasikan dan menjawab pertanyaan siswa kelas 3 SD.
 
-1. Tentukan apakah PERTANYAAN USER relevan dengan MATERI di bawah ini.
+Tugas kamu:
+1. Tentukan apakah PERTANYAAN USER relevan dengan MATERI di bawah ini
+   (relevan = bisa dijawab dari isi materi tersebut).
 2. Tentukan apakah PERTANYAAN USER adalah permintaan untuk MEMBUAT, MENULIS, atau
    MEMPERBAIKI kode program, aplikasi, script, atau halaman web apa pun.
-3. Jika relevan DAN BUKAN permintaan kode: isi field "jawaban".
-4. Jika tidak relevan ATAU permintaan kode: kosongkan field "jawaban".
+   Ini TETAP dianggap permintaan kode walaupun MATERI di bawah ini kebetulan
+   membahas topik pemrograman/koding.
+3. Jika relevan DAN BUKAN permintaan kode: isi field "jawaban" dengan jawaban
+   untuk siswa, HANYA berdasarkan isi MATERI, bahasa sederhana untuk anak kelas 3 SD.
+4. Jika tidak relevan ATAU merupakan permintaan kode: kosongkan field "jawaban"
+   (string kosong ""), tidak perlu menjelaskan apa pun di situ.
 
-Balas HANYA dalam format JSON:
+Balas HANYA dalam format JSON berikut, tanpa teks tambahan apa pun:
 {{
   "relevan": true atau false,
   "permintaan_kode": true atau false,
@@ -201,10 +248,12 @@ MATERI:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return "Maaf, terjadi kendala. Coba tanyakan lagi."
+        return "Maaf, terjadi kendala saat memproses jawaban. Coba tanyakan lagi."
 
+    # Keputusan akhir dipegang di sini, BUKAN oleh teks bebas dari model.
     if data.get("permintaan_kode"):
         return CODE_REQUEST_MESSAGE
+
     if not data.get("relevan"):
         return OUT_OF_CONTEXT_MESSAGE
 
@@ -213,11 +262,15 @@ MATERI:
 
 
 # ============================================================
-# FORM KUIS INTERAKTIF
+# FORM KUIS INTERAKTIF (radio button A/B/C/D + penilaian otomatis)
 # ============================================================
 def render_quiz_form():
     quiz_data = st.session_state.get("quiz_data")
     if not quiz_data or not quiz_data.get("soal_list"):
+        st.info(
+            "Belum ada soal. Ketik **'buat soal'** di panel Chat sebelah kiri untuk "
+            "membuat soal latihan berdasarkan materi yang diupload."
+        )
         return
 
     soal_list = quiz_data["soal_list"]
@@ -242,7 +295,7 @@ def render_quiz_form():
             )
             jawaban_user[nomor] = pilihan_terpilih.split(".")[0].strip() if pilihan_terpilih else None
 
-        submitted = st.form_submit_button("📊 Lihat Hasil", use_container_width=True)
+        submitted = st.form_submit_button("📊 Lihat Hasil")
 
     if submitted:
         kunci_map = {k.get("nomor"): k.get("jawaban") for k in kunci_list}
@@ -264,25 +317,22 @@ def render_quiz_form():
             f"🎯 **Hasil Kuis: {skor} / 100** ({jumlah_benar} dari {total_soal} soal benar)\n\n"
             + "\n".join(detail_lines)
         )
-        st.session_state.quiz_result = hasil_text
 
+        # Hasil disimpan terpisah dari riwayat chat, ditampilkan langsung di bawah form ini.
+        st.session_state.quiz_result = hasil_text
+        st.rerun()
+
+    # Tampilkan hasil (kalau ada) tepat di bawah form, BUKAN di dalam chat.
     if st.session_state.get("quiz_result"):
         st.markdown("---")
         st.markdown(st.session_state.quiz_result)
-        st.markdown("")
-        if st.button("🗑️ Clear Soal", use_container_width=True, key="clear_soal_btn"):
-            st.session_state.quiz_data = None
-            st.session_state.quiz_result = None
-            st.session_state.current_answer_text = None
-            st.session_state.quiz_version += 1
-            st.rerun()
 
 
 # ============================================================
 # STATE HELPERS
 # ============================================================
 def init_state():
-    st.session_state.setdefault("page", "home")
+    st.session_state.setdefault("page", "home")            # home -> upload -> chat
     st.session_state.setdefault("messages", [])
     st.session_state.setdefault("current_answer_text", None)
     st.session_state.setdefault("materi_text", None)
@@ -333,7 +383,8 @@ def render_upload():
     st.info(
         "Sebelum memulai, silahkan upload materi terlebih dahulu (format PDF). "
         "Topik soal akan mengikuti isi materi yang kamu upload, apa pun topiknya.\n\n"
-        f"⚠️ Batasan saat ini: maksimal **{MAX_PDF_PAGES} halaman**."
+        f"⚠️ Batasan saat ini: maksimal **{MAX_PDF_PAGES} halaman**. "
+        "Jika PDF lebih dari itu, upload akan ditolak."
     )
 
     uploaded_file = st.file_uploader("Upload materi (PDF)", type=["pdf"])
@@ -343,9 +394,16 @@ def render_upload():
             materi_text, num_pages = read_uploaded_pdf(uploaded_file, MAX_PDF_PAGES)
 
         if materi_text is None:
-            st.error(f"PDF kamu **{num_pages} halaman**. Maksimal **{MAX_PDF_PAGES} halaman**.")
+            st.error(
+                f"PDF yang kamu upload memiliki **{num_pages} halaman**. "
+                f"Maksimal yang diizinkan saat ini adalah **{MAX_PDF_PAGES} halaman**. "
+                "Silahkan upload ulang dengan PDF yang lebih pendek."
+            )
         elif not materi_text.strip():
-            st.error("Tidak ada teks yang bisa dibaca. Coba PDF lain.")
+            st.error(
+                "Tidak ada teks yang bisa dibaca dari PDF ini "
+                "(kemungkinan PDF berupa hasil scan/gambar). Coba upload PDF lain."
+            )
         else:
             st.session_state.materi_text = materi_text
             st.session_state.materi_filename = uploaded_file.name
@@ -356,107 +414,9 @@ def render_upload():
 
 
 # ============================================================
-# CSS KHUSUS HALAMAN CHAT
-# ============================================================
-CSS_CHAT = """
-<style>
-/* === 0. KUNCI: matikan scroll-anchor browser ===
-   Ini mencegah Chrome/Firefox "auto-scroll" saat Streamlit rerun,
-   yang bikin chat input kelihatan tidak nempel di bawah. */
-* {
-    overflow-anchor: none !important;
-}
-
-/* === 1. Matikan scroll halaman total === */
-html, body {
-    overflow: hidden !important;
-    height: 100vh !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > section,
-section.main {
-    overflow: hidden !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-}
-
-/* Sembunyikan header & footer Streamlit */
-header[data-testid="stHeader"] { display: none !important; }
-footer { display: none !important; }
-
-/* === 2. Block container: flex column setinggi viewport === */
-.main .block-container,
-[data-testid="stAppViewBlockContainer"] {
-    max-width: 100% !important;
-    width: 100% !important;
-    padding: 1rem 2rem 1rem 2rem !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-}
-
-/* === 3. Baris kolom terakhir (chat + soal): isi sisa ruang === */
-.main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-    align-items: stretch !important;
-}
-
-/* === 4. Setiap kolom: flex column penuh tinggi === */
-.main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] {
-    height: 100% !important;
-    max-height: 100% !important;
-    min-height: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-}
-
-/* === 5. Container scroll internal (chat_box, soal_box): isi sisa tinggi kolom === */
-.main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-}
-
-/* === 6. Chat input: nempel di bawah kolom, tidak shrink === */
-.main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
-    div[data-testid="stChatInput"] {
-    flex-shrink: 0 !important;
-    margin-top: 8px !important;
-    position: relative !important;
-    z-index: 5 !important;
-}
-
-/* === 7. Elemen lain di kolom jangan shrink === */
-.main .block-container > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"]
-    > div:not([data-testid="stVerticalBlockBorderWrapper"]):not([data-testid="stChatInput"]) {
-    flex-shrink: 0 !important;
-}
-</style>
-"""
-
-
-# ============================================================
 # HALAMAN: CHATBOT
 # ============================================================
 def render_chat():
-    st.markdown(CSS_CHAT, unsafe_allow_html=True)
-
-    materi_text = st.session_state.get("materi_text")
-    quiz_data = st.session_state.get("quiz_data")
-    has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
-
-    # ---------- HEADER ----------
     top_left, top_right = st.columns([1, 3])
     with top_left:
         if st.button("⬅ Kembali ke Menu Utama"):
@@ -465,36 +425,30 @@ def render_chat():
     with top_right:
         st.caption(f"📄 Materi aktif: **{st.session_state.get('materi_filename') or '-'}**")
 
-    st.markdown("### 🎓 Chatbot Soal Latihan")
+    st.title("🎓 Chatbot Soal Latihan")
 
+    materi_text = st.session_state.get("materi_text")
     if not materi_text:
-        st.warning("Materi belum diupload.")
+        st.warning("Materi belum diupload. Silahkan upload materi terlebih dahulu.")
         if st.button("Ke Halaman Upload"):
             st.session_state.page = "upload"
             st.rerun()
         return
 
-    # ---------- LAYOUT ----------
-    if has_quiz:
-        col_chat, col_soal = st.columns([1, 1], gap="medium")
-    else:
-        col_chat = st.container()
-        col_soal = None
+    col_chat, col_soal = st.columns([5, 6], gap="large")
 
     # ------------------------------------------------------------------
     # KOLOM KIRI: CHAT
     # ------------------------------------------------------------------
     with col_chat:
-        st.markdown("#### 💬 Chat")
+        st.subheader("💬 Chat")
         st.caption(
             "Ajukan pertanyaan berdasarkan materi, atau ketik **'buat soal'** untuk "
-            "dibuatkan soal latihan."
+            "dibuatkan soal latihan di panel sebelah kanan."
         )
 
-        chat_box = st.container(height=480, border=True)
+        chat_box = st.container(height=420)
         with chat_box:
-            if not st.session_state.messages:
-                st.caption("_Belum ada pesan. Mulai dengan mengetik pertanyaan di bawah._")
             for m in st.session_state.messages:
                 with st.chat_message(m["role"]):
                     st.markdown(m["content"])
@@ -516,13 +470,19 @@ def render_chat():
                     judul = f" - {topik}" if topik else ""
                     bot_reply = (
                         f"✅ Soal latihan{judul} sudah dibuat! Silahkan jawab lewat panel "
-                        "**Soal** di sebelah kanan."
+                        "**Soal** di sebelah kanan, lalu klik **'Lihat Hasil'** untuk melihat "
+                        "nilai kamu. Atau ketik **'kunci jawaban'** untuk melihat kunci jawabannya."
                     )
+
                 elif is_kunci_jawaban_request(normalized):
                     if st.session_state.current_answer_text:
                         bot_reply = st.session_state.current_answer_text
                     else:
-                        bot_reply = "Soal belum dibuat. Ketik **'buat soal'** dulu."
+                        bot_reply = (
+                            "Soal belum dibuat. Ketik **'buat soal'** terlebih dahulu untuk "
+                            "membuat soal latihan."
+                        )
+
                 else:
                     bot_reply = grounded_chat(materi_text, st.session_state.messages, user_input)
 
@@ -530,26 +490,18 @@ def render_chat():
             st.rerun()
 
     # ------------------------------------------------------------------
-    # KOLOM KANAN: SOAL
+    # KOLOM KANAN: SOAL + HASIL
     # ------------------------------------------------------------------
-    if col_soal is not None:
-        with col_soal:
-            st.markdown("#### 📝 Soal")
-            soal_box = st.container(height=480, border=True)
-            with soal_box:
-                render_quiz_form()
+    with col_soal:
+        st.subheader("📝 Soal")
+        render_quiz_form()
 
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
-    st.set_page_config(
-        page_title="Schoool Question Generated",
-        page_icon="📚",
-        layout="wide",
-        initial_sidebar_state="collapsed",
-    )
+    st.set_page_config(page_title="Schoool Question Generated", page_icon="📚", layout="wide")
     init_state()
 
     page = st.session_state.page
