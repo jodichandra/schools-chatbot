@@ -119,14 +119,15 @@ MATERI:
     quiz_lines = ["📝 **Soal Latihan - BAM**", ""]
     for s in soal_list:
         quiz_lines.append(f"**{s.get('nomor')}. {s.get('pertanyaan')}**")
-        for opt, text in s.get("pilihan", {}).items():
-            quiz_lines.append(f"   {opt}. {text}")
+        pilihan = s.get("pilihan", {})
+        for opt, text in sorted(pilihan.items(), key=lambda pair: pair[0]):
+            quiz_lines.append(f"- **{opt}.** {text}")
         quiz_lines.append("")
     quiz_text = "\n".join(quiz_lines).strip()
 
     answer_lines = ["🔑 **Kunci Jawaban**", ""]
     for k in kunci_list:
-        line = f"{k.get('nomor')}. {k.get('jawaban')}"
+        line = f"- **{k.get('nomor')}.** {k.get('jawaban')}"
         if k.get("penjelasan"):
             line += f" — {k.get('penjelasan')}"
         answer_lines.append(line)
@@ -190,6 +191,14 @@ def render_home():
     st.title("📚 Schoool Question Generated")
     st.write("Selamat datang! Pilih mata pelajaran untuk membuat soal latihan.")
 
+    st.subheader("Muatan Lokal")
+    if st.button("🏯 Budaya Adat Minangkabau", use_container_width=True, type="primary"):
+        reset_chat_state()
+        st.session_state.page = "chat"
+        st.rerun()
+
+    st.divider()
+
     st.subheader("Daftar Pelajaran")
     cols = st.columns(3)
     coming_soon_subjects = ["Bahasa Inggris", "Bahasa Indonesia", "Matematika"]
@@ -197,14 +206,6 @@ def render_home():
         with col:
             st.button(f"🔒 {subject}", disabled=True, use_container_width=True)
             st.caption("Coming Soon")
-
-    st.divider()
-
-    st.subheader("Muatan Lokal")
-    if st.button("🏯 Budaya Adat Minangkabau", use_container_width=True, type="primary"):
-        reset_chat_state()
-        st.session_state.page = "chat"
-        st.rerun()
 
 
 # ============================================================
