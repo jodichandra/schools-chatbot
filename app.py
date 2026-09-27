@@ -505,6 +505,9 @@ def render_upload():
 # ============================================================
 CSS_CHAT = """
 <style>
+/* =========================================================
+   GLOBAL
+   ========================================================= */
 html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -512,6 +515,7 @@ html, body {
     height: 100% !important;
     overflow: hidden !important;
 }
+
 .stApp,
 [data-testid="stAppViewContainer"],
 [data-testid="stAppViewContainer"] > section,
@@ -521,10 +525,15 @@ section.main {
     max-height: 100vh !important;
     overflow: hidden !important;
 }
+
 header[data-testid="stHeader"],
 footer {
     display: none !important;
 }
+
+/* =========================================================
+   BLOCK CONTAINER
+   ========================================================= */
 [data-testid="stAppViewBlockContainer"] {
     width: 100% !important;
     max-width: 100% !important;
@@ -537,7 +546,9 @@ footer {
     flex-direction: column !important;
 }
 
-/* HEADER FIXED */
+/* =========================================================
+   HEADER FIXED
+   ========================================================= */
 .st-key-chat_header {
     position: fixed !important;
     top: 4px !important;
@@ -551,8 +562,14 @@ footer {
     width: 100% !important;
 }
 
-/* AREA CHAT + SOAL */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type {
+/* =========================================================
+   AREA CHAT + SOAL (baris kolom terakhir)
+   ---------------------------------------------------------
+   Kita KUNCI tinggi baris ini, dan paksa overflow hidden.
+   Ini yang mencegah scroll naik ke level halaman.
+   ========================================================= */
+[data-testid="stAppViewBlockContainer"]
+> div[data-testid="stHorizontalBlock"]:last-of-type {
     flex: 0 0 auto !important;
     height: calc(100vh - 145px) !important;
     min-height: 0 !important;
@@ -561,8 +578,15 @@ footer {
     align-items: stretch !important;
 }
 
-/* KOLOM CHAT + SOAL */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] {
+/* =========================================================
+   KOLOM (chat & soal)
+   ---------------------------------------------------------
+   Setiap kolom: flex column, tinggi penuh baris,
+   overflow HIDDEN agar isi kolom tidak "bocor" ke halaman.
+   ========================================================= */
+[data-testid="stAppViewBlockContainer"]
+> div[data-testid="stHorizontalBlock"]:last-of-type
+> div[data-testid="column"] {
     height: 100% !important;
     min-height: 0 !important;
     max-height: 100% !important;
@@ -572,23 +596,53 @@ footer {
     box-sizing: border-box !important;
 }
 
-/* WRAPPER DALAM KOLOM */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] > div {
+/* =========================================================
+   WRAPPER LANGSUNG DI DALAM KOLOM
+   ---------------------------------------------------------
+   Streamlit membungkus konten kolom dengan beberapa div.
+   Semua div perantara ini harus overflow: hidden,
+   kalau tidak, scroll akan "naik" ke parent.
+   ========================================================= */
+[data-testid="stAppViewBlockContainer"]
+> div[data-testid="stHorizontalBlock"]:last-of-type
+> div[data-testid="column"]
+> div,
+[data-testid="stAppViewBlockContainer"]
+> div[data-testid="stHorizontalBlock"]:last-of-type
+> div[data-testid="column"]
+> div > div[data-testid="stVerticalBlock"] {
     min-height: 0 !important;
+    overflow: hidden !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
-/* CONTAINER CHAT / SOAL */
+/* =========================================================
+   CONTAINER CHAT / SOAL (border=True)
+   ---------------------------------------------------------
+   Ini container yang SCROLL INDEPENDEN.
+   flex: 1 1 auto -> isi sisa tinggi kolom
+   overflow-y: auto -> scroll internal
+   ========================================================= */
 [data-testid="stVerticalBlockBorderWrapper"] {
-    flex: 1 1 0 !important;
+    flex: 1 1 auto !important;
     min-height: 0 !important;
-    height: 0 !important;
+    height: auto !important;
     max-height: 100% !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     box-sizing: border-box !important;
 }
 
-/* SCROLLBAR */
+/* Paksa anak dari border wrapper juga tidak overflow ke luar */
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    min-height: 0 !important;
+}
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
     width: 7px;
 }
@@ -600,7 +654,9 @@ footer {
     background: transparent;
 }
 
-/* CHAT INPUT FIXED */
+/* =========================================================
+   CHAT INPUT FIXED
+   ========================================================= */
 [data-testid="stChatInput"] {
     position: fixed !important;
     left: 5.75vw !important;
@@ -619,14 +675,18 @@ footer {
     box-sizing: border-box !important;
 }
 
-/* HEADING */
+/* =========================================================
+   HEADING
+   ========================================================= */
 [data-testid="stAppViewBlockContainer"] h1,
 [data-testid="stAppViewBlockContainer"] h2,
 [data-testid="stAppViewBlockContainer"] h3 {
     margin-top: 0.2rem !important;
 }
 
-/* PREVENT AUTO ANCHOR */
+/* =========================================================
+   PREVENT AUTO ANCHOR
+   ========================================================= */
 * {
     overflow-anchor: none !important;
 }
