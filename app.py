@@ -8,6 +8,7 @@ from openai import OpenAI
 # ============================================================
 # KONFIGURASI
 # ============================================================
+
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
 
@@ -19,22 +20,34 @@ SOAL_TRIGGER_PATTERNS = [
     r"\bquiz\b",
     r"\bgenerate\s+soal\b",
 ]
+
 KUNCI_JAWABAN_PATTERN = r"\bkunci\s+jawaban\b"
 
 # ============================================================
 # UTIL
 # ============================================================
+
 def is_soal_trigger(normalized_text: str) -> bool:
-    return any(re.search(p, normalized_text) for p in SOAL_TRIGGER_PATTERNS)
+    return any(
+        re.search(pattern, normalized_text)
+        for pattern in SOAL_TRIGGER_PATTERNS
+    )
+
 
 def is_kunci_jawaban_request(normalized_text: str) -> bool:
-    return re.search(KUNCI_JAWABAN_PATTERN, normalized_text) is not None
+    return re.search(
+        KUNCI_JAWABAN_PATTERN,
+        normalized_text
+    ) is not None
+
 
 # ============================================================
 # OPENAI CLIENT
 # ============================================================
+
 def get_openai_client() -> OpenAI:
     api_key = None
+
     try:
         api_key = st.secrets.get("OPENAI_API_KEY")
     except Exception:
@@ -48,10 +61,15 @@ def get_openai_client() -> OpenAI:
 
     return OpenAI(api_key=api_key)
 
+
 # ============================================================
 # BACA PDF
 # ============================================================
-def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
+
+def read_uploaded_pdf(
+    uploaded_file,
+    max_pages: int = MAX_PDF_PAGES
+):
     uploaded_file.seek(0)
 
     with pdfplumber.open(uploaded_file) as pdf:
@@ -63,17 +81,22 @@ def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
         text_parts = []
 
         for page in pdf.pages:
-            t = page.extract_text()
+            text = page.extract_text()
 
-            if t:
-                text_parts.append(t)
+            if text:
+                text_parts.append(text)
 
     return "\n".join(text_parts), num_pages
+
 
 # ============================================================
 # GENERATE SOAL
 # ============================================================
-def generate_quiz(materi_text: str, n_soal: int = 5):
+
+def generate_quiz(
+    materi_text: str,
+    n_soal: int = 5
+):
     client = get_openai_client()
 
     system_prompt = f"""
@@ -113,6 +136,7 @@ Balas HANYA dalam format JSON persis seperti ini:
 }}
 
 MATERI:
+
 {materi_text}
 """
 
@@ -153,6 +177,10 @@ MATERI:
         key=lambda k: k.get("nomor", 0)
     )
 
+    # --------------------------------------------------------
+    # TEXT SOAL
+    # --------------------------------------------------------
+
     judul_soal = (
         f"📝 **Soal Latihan - {topik}**"
         if topik
@@ -164,36 +192,40 @@ MATERI:
         ""
     ]
 
-    for s in soal_list:
+    for soal in soal_list:
         quiz_lines.append(
-            f"**{s.get('nomor')}. {s.get('pertanyaan')}**"
+            f"**{soal.get('nomor')}. {soal.get('pertanyaan')}**"
         )
 
-        for opt, text in sorted(
-            s.get("pilihan", {}).items(),
+        for opt, option_text in sorted(
+            soal.get("pilihan", {}).items(),
             key=lambda pair: pair[0]
         ):
             quiz_lines.append(
-                f"- **{opt}.** {text}"
+                f"- **{opt}.** {option_text}"
             )
 
         quiz_lines.append("")
 
     quiz_text = "\n".join(quiz_lines).strip()
 
+    # --------------------------------------------------------
+    # TEXT KUNCI JAWABAN
+    # --------------------------------------------------------
+
     answer_lines = [
         "🔑 **Kunci Jawaban**",
         ""
     ]
 
-    for k in kunci_list:
+    for kunci in kunci_list:
         line = (
-            f"- **{k.get('nomor')}.** "
-            f"{k.get('jawaban')}"
+            f"- **{kunci.get('nomor')}.** "
+            f"{kunci.get('jawaban')}"
         )
 
-        if k.get("penjelasan"):
-            line += f" — {k.get('penjelasan')}"
+        if kunci.get("penjelasan"):
+            line += f" — {kunci.get('penjelasan')}"
 
         answer_lines.append(line)
 
@@ -207,9 +239,11 @@ MATERI:
         "topik": topik,
     }
 
+
 # ============================================================
 # CHAT UMUM
 # ============================================================
+
 OUT_OF_CONTEXT_MESSAGE = (
     "Maaf, pertanyaan itu tidak sesuai dengan materi yang diupload. "
     "Saya hanya bisa menjawab berdasarkan materi ini. 😊"
@@ -220,21 +254,28 @@ CODE_REQUEST_MESSAGE = (
     "Saya tidak bisa membuatkan kode program, aplikasi, atau halaman web apa pun."
 )
 
+
 def grounded_chat(
     materi_text: str,
     history: list,
     user_input: str
 ) -> str:
+
     client = get_openai_client()
 
     system_prompt = f"""
 Kamu bertugas mengklasifikasikan dan menjawab pertanyaan siswa kelas 3 SD.
 
 1. Tentukan apakah PERTANYAAN USER relevan dengan MATERI.
+
 2. Tentukan apakah PERTANYAAN USER adalah permintaan untuk MEMBUAT, MENULIS,
    atau MEMPERBAIKI kode program, aplikasi, script, atau halaman web apa pun.
-3. Jika relevan DAN BUKAN permintaan kode: isi field "jawaban".
-4. Jika tidak relevan ATAU permintaan kode: kosongkan field "jawaban".
+
+3. Jika relevan DAN BUKAN permintaan kode:
+   isi field "jawaban".
+
+4. Jika tidak relevan ATAU permintaan kode:
+   kosongkan field "jawaban".
 
 Balas HANYA dalam format JSON:
 
@@ -245,6 +286,7 @@ Balas HANYA dalam format JSON:
 }}
 
 MATERI:
+
 {materi_text}
 """
 
@@ -255,10 +297,10 @@ MATERI:
         }
     ]
 
-    for m in history[-6:]:
+    for message in history[-6:]:
         messages.append({
-            "role": m["role"],
-            "content": m["content"]
+            "role": message["role"],
+            "content": message["content"]
         })
 
     messages.append({
@@ -288,12 +330,19 @@ MATERI:
 
     jawaban = (data.get("jawaban") or "").strip()
 
-    return jawaban if jawaban else OUT_OF_CONTEXT_MESSAGE
+    return (
+        jawaban
+        if jawaban
+        else OUT_OF_CONTEXT_MESSAGE
+    )
+
 
 # ============================================================
 # FORM KUIS INTERAKTIF
 # ============================================================
+
 def render_quiz_form():
+
     quiz_data = st.session_state.get("quiz_data")
 
     if not quiz_data or not quiz_data.get("soal_list"):
@@ -301,19 +350,27 @@ def render_quiz_form():
 
     soal_list = quiz_data["soal_list"]
     kunci_list = quiz_data["kunci_list"]
-    version = st.session_state.get("quiz_version", 0)
+
+    version = st.session_state.get(
+        "quiz_version",
+        0
+    )
 
     st.markdown("#### ✏️ Jawab Soal di Bawah Ini")
 
-    with st.form(key=f"quiz_form_{version}"):
+    with st.form(
+        key=f"quiz_form_{version}"
+    ):
+
         jawaban_user = {}
 
-        for s in soal_list:
-            nomor = s.get("nomor")
-            pertanyaan = s.get("pertanyaan")
+        for soal in soal_list:
+
+            nomor = soal.get("nomor")
+            pertanyaan = soal.get("pertanyaan")
 
             pilihan = sorted(
-                s.get("pilihan", {}).items(),
+                soal.get("pilihan", {}).items(),
                 key=lambda pair: pair[0]
             )
 
@@ -341,6 +398,7 @@ def render_quiz_form():
         )
 
     if submitted:
+
         kunci_map = {
             k.get("nomor"): k.get("jawaban")
             for k in kunci_list
@@ -351,9 +409,13 @@ def render_quiz_form():
         detail_lines = []
 
         for nomor in sorted(kunci_map.keys()):
+
             jawaban_benar = kunci_map[nomor]
             jawaban_dipilih = jawaban_user.get(nomor)
-            benar = jawaban_dipilih == jawaban_benar
+
+            benar = (
+                jawaban_dipilih == jawaban_benar
+            )
 
             if benar:
                 jumlah_benar += 1
@@ -361,16 +423,23 @@ def render_quiz_form():
             status = (
                 "✅ Benar"
                 if benar
-                else f"❌ Salah (jawaban benar: **{jawaban_benar}**)"
+                else (
+                    f"❌ Salah "
+                    f"(jawaban benar: "
+                    f"**{jawaban_benar}**)"
+                )
             )
 
             detail_lines.append(
                 f"- Soal {nomor}: kamu jawab "
-                f"**{jawaban_dipilih or '(belum dijawab)'}** — {status}"
+                f"**{jawaban_dipilih or '(belum dijawab)'}** "
+                f"— {status}"
             )
 
         skor = (
-            round((jumlah_benar / total_soal) * 100)
+            round(
+                (jumlah_benar / total_soal) * 100
+            )
             if total_soal
             else 0
         )
@@ -382,53 +451,107 @@ def render_quiz_form():
         )
 
     if st.session_state.get("quiz_result"):
+
         st.markdown("---")
-        st.markdown(st.session_state.quiz_result)
-        st.markdown("")
+        st.markdown(
+            st.session_state.quiz_result
+        )
 
         if st.button(
             "🗑️ Clear Soal",
             use_container_width=True,
             key="clear_soal_btn"
         ):
+
             st.session_state.quiz_data = None
             st.session_state.quiz_result = None
             st.session_state.current_answer_text = None
             st.session_state.quiz_version += 1
+
             st.rerun()
+
 
 # ============================================================
 # STATE
 # ============================================================
+
 def init_state():
-    st.session_state.setdefault("page", "home")
-    st.session_state.setdefault("messages", [])
-    st.session_state.setdefault("current_answer_text", None)
-    st.session_state.setdefault("materi_text", None)
-    st.session_state.setdefault("materi_filename", None)
-    st.session_state.setdefault("quiz_data", None)
-    st.session_state.setdefault("quiz_result", None)
-    st.session_state.setdefault("quiz_version", 0)
+
+    st.session_state.setdefault(
+        "page",
+        "home"
+    )
+
+    st.session_state.setdefault(
+        "messages",
+        []
+    )
+
+    st.session_state.setdefault(
+        "current_answer_text",
+        None
+    )
+
+    st.session_state.setdefault(
+        "materi_text",
+        None
+    )
+
+    st.session_state.setdefault(
+        "materi_filename",
+        None
+    )
+
+    st.session_state.setdefault(
+        "quiz_data",
+        None
+    )
+
+    st.session_state.setdefault(
+        "quiz_result",
+        None
+    )
+
+    st.session_state.setdefault(
+        "quiz_version",
+        0
+    )
+
 
 def reset_chat_state():
+
     st.session_state.messages = []
     st.session_state.current_answer_text = None
     st.session_state.quiz_data = None
     st.session_state.quiz_result = None
     st.session_state.quiz_version += 1
 
+
 def reset_materi_state():
+
     st.session_state.materi_text = None
     st.session_state.materi_filename = None
+
     reset_chat_state()
+
 
 # ============================================================
 # HOME
 # ============================================================
+
 def render_home():
-    st.title("📚 Schoool Question Generated")
-    st.write("Selamat datang! Pilih menu untuk membuat soal latihan.")
-    st.title("Upload Materi PDF")
+
+    st.title(
+        "📚 Schoool Question Generated"
+    )
+
+    st.write(
+        "Selamat datang! Pilih menu untuk membuat soal latihan."
+    )
+
+    st.title(
+        "Upload Materi PDF"
+    )
 
     st.caption(
         "Upload materi PDF-mu sendiri, soal dan jawaban "
@@ -441,27 +564,37 @@ def render_home():
         type="primary",
         key="home_upload_btn"
     ):
+
         reset_materi_state()
+
         st.session_state.page = "upload"
+
         st.rerun()
+
 
 # ============================================================
 # UPLOAD
 # ============================================================
+
 def render_upload():
+
     if st.button(
         "⬅ Kembali ke Menu Utama",
         key="upload_back_home"
     ):
+
         st.session_state.page = "home"
+
         st.rerun()
 
-    st.title("📄 Upload Materi")
+    st.title(
+        "📄 Upload Materi"
+    )
 
     st.info(
         "Sebelum memulai, silahkan upload materi terlebih dahulu "
         "(format PDF). Topik soal akan mengikuti isi materi yang "
-        "kamu upload, apa pun topiknya.\n\n"
+        f"kamu upload, apa pun topiknya.\n\n"
         f"⚠️ Batasan saat ini: maksimal **{MAX_PDF_PAGES} halaman**."
     )
 
@@ -472,46 +605,70 @@ def render_upload():
     )
 
     if uploaded_file is not None:
-        with st.spinner("Memeriksa dan membaca materi..."):
+
+        with st.spinner(
+            "Memeriksa dan membaca materi..."
+        ):
+
             materi_text, num_pages = read_uploaded_pdf(
                 uploaded_file,
                 MAX_PDF_PAGES
             )
 
         if materi_text is None:
+
             st.error(
                 f"PDF kamu **{num_pages} halaman**. "
                 f"Maksimal **{MAX_PDF_PAGES} halaman**."
             )
+
         elif not materi_text.strip():
+
             st.error(
-                "Tidak ada teks yang bisa dibaca. Coba PDF lain."
+                "Tidak ada teks yang bisa dibaca. "
+                "Coba PDF lain."
             )
+
         else:
+
             st.session_state.materi_text = materi_text
-            st.session_state.materi_filename = uploaded_file.name
+
+            st.session_state.materi_filename = (
+                uploaded_file.name
+            )
+
             reset_chat_state()
 
             st.success(
-                f"Materi '{uploaded_file.name}' berhasil diupload "
-                f"({num_pages} halaman)."
+                f"Materi '{uploaded_file.name}' "
+                f"berhasil diupload ({num_pages} halaman)."
             )
 
             st.session_state.page = "chat"
+
             st.rerun()
+
 
 # ============================================================
 # CSS CHAT
 # ============================================================
+
 CSS_CHAT = """
 <style>
-html, body {
+
+/* ==========================================================
+   GLOBAL
+   ========================================================== */
+
+html,
+body {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
     height: 100% !important;
     overflow: hidden !important;
 }
+
 .stApp,
 [data-testid="stAppViewContainer"],
 [data-testid="stAppViewContainer"] > section,
@@ -521,10 +678,16 @@ section.main {
     max-height: 100vh !important;
     overflow: hidden !important;
 }
+
 header[data-testid="stHeader"],
 footer {
     display: none !important;
 }
+
+/* ==========================================================
+   MAIN CONTAINER
+   ========================================================== */
+
 [data-testid="stAppViewBlockContainer"] {
     width: 100% !important;
     max-width: 100% !important;
@@ -537,32 +700,54 @@ footer {
     flex-direction: column !important;
 }
 
-/* HEADER FIXED */
+/* ==========================================================
+   HEADER FIXED
+   ========================================================== */
+
 .st-key-chat_header {
     position: fixed !important;
     top: 4px !important;
     left: 5.75vw !important;
     right: 5.75vw !important;
     z-index: 900 !important;
-    background: var(--background-color) !important;
+    background: #fff !important;
     padding-bottom: 4px !important;
 }
+
 .st-key-chat_header > div {
     width: 100% !important;
 }
 
-/* AREA CHAT + SOAL */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type {
+/* ==========================================================
+   AREA CHAT + SOAL
+   ========================================================== */
+
+.st-key-chat_layout {
     flex: 0 0 auto !important;
     height: calc(100vh - 145px) !important;
     min-height: 0 !important;
     max-height: calc(100vh - 145px) !important;
     overflow: hidden !important;
+    width: 100% !important;
+}
+
+/* ==========================================================
+   HORIZONTAL BLOCK
+   ========================================================== */
+
+.st-key-chat_layout [data-testid="stHorizontalBlock"] {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
     align-items: stretch !important;
 }
 
-/* KOLOM CHAT + SOAL */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] {
+/* ==========================================================
+   KOLOM CHAT + SOAL
+   ========================================================== */
+
+.st-key-chat_layout [data-testid="column"] {
     height: 100% !important;
     min-height: 0 !important;
     max-height: 100% !important;
@@ -572,12 +757,19 @@ footer {
     box-sizing: border-box !important;
 }
 
-/* WRAPPER DALAM KOLOM */
-[data-testid="stAppViewBlockContainer"] > div[data-testid="stHorizontalBlock"]:last-of-type > div[data-testid="column"] > div {
+/* ==========================================================
+   WRAPPER DALAM KOLOM
+   ========================================================== */
+
+.st-key-chat_layout [data-testid="column"] > div {
     min-height: 0 !important;
 }
 
-/* CONTAINER CHAT / SOAL */
+/* ==========================================================
+   CONTAINER BORDER CHAT / SOAL
+   ========================================================== */
+
+.st-key-chat_layout
 [data-testid="stVerticalBlockBorderWrapper"] {
     flex: 1 1 0 !important;
     min-height: 0 !important;
@@ -588,19 +780,27 @@ footer {
     box-sizing: border-box !important;
 }
 
-/* SCROLLBAR */
+/* ==========================================================
+   SCROLLBAR
+   ========================================================== */
+
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
     width: 7px;
 }
+
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-thumb {
     border-radius: 10px;
     background: rgba(120, 120, 120, 0.45);
 }
+
 [data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-track {
     background: transparent;
 }
 
-/* CHAT INPUT FIXED */
+/* ==========================================================
+   CHAT INPUT FIXED
+   ========================================================== */
+
 [data-testid="stChatInput"] {
     position: fixed !important;
     left: 5.75vw !important;
@@ -613,126 +813,208 @@ footer {
     padding: 0 !important;
     box-sizing: border-box !important;
 }
+
 [data-testid="stChatInput"] > div {
     width: 100% !important;
     max-width: none !important;
     box-sizing: border-box !important;
 }
 
-/* HEADING */
+/* ==========================================================
+   HEADING
+   ========================================================== */
+
 [data-testid="stAppViewBlockContainer"] h1,
 [data-testid="stAppViewBlockContainer"] h2,
 [data-testid="stAppViewBlockContainer"] h3 {
     margin-top: 0.2rem !important;
 }
 
-/* PREVENT AUTO ANCHOR */
+/* ==========================================================
+   PREVENT AUTO ANCHOR
+   ========================================================== */
+
 * {
     overflow-anchor: none !important;
 }
+
 </style>
 """
+
 
 # ============================================================
 # CHATBOT
 # ============================================================
+
 def render_chat():
+
     st.markdown(
         CSS_CHAT,
         unsafe_allow_html=True
     )
 
-    materi_text = st.session_state.get("materi_text")
-    quiz_data = st.session_state.get("quiz_data")
-    has_quiz = bool(
-        quiz_data and quiz_data.get("soal_list")
+    materi_text = st.session_state.get(
+        "materi_text"
     )
 
+    quiz_data = st.session_state.get(
+        "quiz_data"
+    )
+
+    has_quiz = bool(
+        quiz_data
+        and quiz_data.get("soal_list")
+    )
+
+    # ========================================================
     # HEADER FIXED
-    with st.container(key="chat_header"):
-        top_left, top_right = st.columns([1, 3])
+    # ========================================================
+
+    with st.container(
+        key="chat_header"
+    ):
+
+        top_left, top_right = st.columns(
+            [1, 3]
+        )
 
         with top_left:
+
             if st.button(
                 "⬅ Kembali ke Menu Utama",
                 key="chat_back_home"
             ):
+
                 st.session_state.page = "home"
+
                 st.rerun()
 
         with top_right:
+
             st.caption(
                 f"📄 Materi aktif: "
                 f"**{st.session_state.get('materi_filename') or '-'}**"
             )
 
-        st.markdown("### 🎓 Chatbot Soal Latihan")
+        st.markdown(
+            "### 🎓 Chatbot Soal Latihan"
+        )
+
+    # ========================================================
+    # CEK MATERI
+    # ========================================================
 
     if not materi_text:
-        st.warning("Materi belum diupload.")
+
+        st.warning(
+            "Materi belum diupload."
+        )
 
         if st.button(
             "Ke Halaman Upload",
             key="chat_go_upload"
         ):
+
             st.session_state.page = "upload"
+
             st.rerun()
 
         return
 
+    # ========================================================
     # LAYOUT CHAT + SOAL
-    if has_quiz:
+    #
+    # PENTING:
+    # Columns SELALU dibuat.
+    #
+    # Jangan pernah:
+    #
+    # if has_quiz:
+    #     st.columns(...)
+    #
+    # Karena itu akan menyebabkan posisi Chat berubah
+    # ketika quiz muncul.
+    # ========================================================
+
+    with st.container(
+        key="chat_layout"
+    ):
+
         col_chat, col_soal = st.columns(
             [1, 1],
             gap="medium"
         )
-    else:
-        col_chat = st.container()
-        col_soal = None
 
-    # ========================================================
-    # CHAT COLUMN
-    # ========================================================
-    with col_chat:
-        st.markdown("#### 💬 Chat")
+        # ====================================================
+        # CHAT COLUMN
+        # ====================================================
 
-        st.caption(
-            "Ajukan pertanyaan berdasarkan materi, atau ketik "
-            "**'buat soal'** untuk dibuatkan soal latihan."
-        )
+        with col_chat:
 
-        chat_box = st.container(
-            border=True
-        )
+            st.markdown(
+                "#### 💬 Chat"
+            )
 
-        with chat_box:
-            if not st.session_state.messages:
-                st.caption(
-                    "_Belum ada pesan. Mulai dengan mengetik "
-                    "pertanyaan di bawah._"
-                )
+            st.caption(
+                "Ajukan pertanyaan berdasarkan materi, "
+                "atau ketik **'buat soal'** untuk dibuatkan "
+                "soal latihan."
+            )
 
-            for m in st.session_state.messages:
-                with st.chat_message(m["role"]):
-                    st.markdown(m["content"])
-
-    # ========================================================
-    # SOAL COLUMN
-    # ========================================================
-    if col_soal is not None:
-        with col_soal:
-            st.markdown("#### 📝 Soal")
-
-            soal_box = st.container(
+            chat_box = st.container(
                 border=True
             )
 
-            with soal_box:
-                render_quiz_form()
+            with chat_box:
+
+                if not st.session_state.messages:
+
+                    st.caption(
+                        "_Belum ada pesan. Mulai dengan "
+                        "mengetik pertanyaan di bawah._"
+                    )
+
+                for message in st.session_state.messages:
+
+                    with st.chat_message(
+                        message["role"]
+                    ):
+
+                        st.markdown(
+                            message["content"]
+                        )
+
+        # ====================================================
+        # SOAL COLUMN
+        # ====================================================
+
+        with col_soal:
+
+            st.markdown(
+                "#### 📝 Soal"
+            )
+
+            if has_quiz:
+
+                soal_box = st.container(
+                    border=True
+                )
+
+                with soal_box:
+
+                    render_quiz_form()
+
+            else:
+
+                st.caption(
+                    "Soal akan muncul di sini setelah kamu "
+                    "mengetik **'buat soal'**."
+                )
 
     # ========================================================
-    # CHAT INPUT
+    # CHAT INPUT FIXED
     # ========================================================
+
     user_input = st.chat_input(
         "Ketik pesan Anda di sini..."
     )
@@ -740,44 +1022,92 @@ def render_chat():
     # ========================================================
     # PROCESS CHAT
     # ========================================================
+
     if user_input:
+
         st.session_state.messages.append({
             "role": "user",
             "content": user_input
         })
 
-        normalized = user_input.strip().lower()
+        normalized = (
+            user_input
+            .strip()
+            .lower()
+        )
 
-        with st.spinner("Sedang memproses..."):
-            if is_soal_trigger(normalized):
-                quiz_data = generate_quiz(materi_text)
+        with st.spinner(
+            "Sedang memproses..."
+        ):
 
-                st.session_state.quiz_data = quiz_data
+            # =================================================
+            # GENERATE SOAL
+            # =================================================
+
+            if is_soal_trigger(
+                normalized
+            ):
+
+                quiz_data = generate_quiz(
+                    materi_text
+                )
+
+                st.session_state.quiz_data = (
+                    quiz_data
+                )
+
                 st.session_state.current_answer_text = (
                     quiz_data["answer_text"]
                 )
+
                 st.session_state.quiz_result = None
+
                 st.session_state.quiz_version += 1
 
-                topik = quiz_data.get("topik") or ""
-                judul = f" - {topik}" if topik else ""
-
-                bot_reply = (
-                    f"✅ Soal latihan{judul} sudah dibuat! "
-                    "Silahkan jawab lewat panel **Soal** di sebelah kanan."
+                topik = (
+                    quiz_data.get("topik")
+                    or ""
                 )
 
-            elif is_kunci_jawaban_request(normalized):
+                judul = (
+                    f" - {topik}"
+                    if topik
+                    else ""
+                )
+
+                bot_reply = (
+                    f"✅ Soal latihan{judul} "
+                    "sudah dibuat! Silahkan jawab "
+                    "lewat panel **Soal** di sebelah kanan."
+                )
+
+            # =================================================
+            # KUNCI JAWABAN
+            # =================================================
+
+            elif is_kunci_jawaban_request(
+                normalized
+            ):
+
                 if st.session_state.current_answer_text:
+
                     bot_reply = (
                         st.session_state.current_answer_text
                     )
+
                 else:
+
                     bot_reply = (
                         "Soal belum dibuat. "
                         "Ketik **'buat soal'** dulu."
                     )
+
+            # =================================================
+            # CHAT NORMAL
+            # =================================================
+
             else:
+
                 bot_reply = grounded_chat(
                     materi_text,
                     st.session_state.messages,
@@ -791,10 +1121,13 @@ def render_chat():
 
         st.rerun()
 
+
 # ============================================================
 # MAIN
 # ============================================================
+
 def main():
+
     st.set_page_config(
         page_title="Schoool Question Generated",
         page_icon="📚",
@@ -803,14 +1136,21 @@ def main():
     )
 
     init_state()
+
     page = st.session_state.page
 
     if page == "home":
+
         render_home()
+
     elif page == "upload":
+
         render_upload()
+
     else:
+
         render_chat()
+
 
 if __name__ == "__main__":
     main()
