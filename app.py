@@ -26,7 +26,7 @@ MODEL_NAME = "gpt-4o-mini"
 MATERI_PDF_PATH = os.path.join("materi", "budaya_minangkabau.pdf")
 
 # Link yang muncul di tombol "akses materi" pada halaman chatbot
-MATERI_LINK = "https://drive.google.com/your-link-here"  # TODO: ganti dengan link materi asli
+MATERI_LINK = "https://drive.google.com/file/d/1vEwpOnOTbYez3_VW8mWlN7q5hB6j0vot/view?usp=sharing"  # TODO: ganti dengan link materi asli
 
 TEMPLATE_GREETING = (
     "Hallo saya chatbot khusus untuk membuat soal berdasarkan pelajaran yang "
