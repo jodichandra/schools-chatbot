@@ -263,14 +263,11 @@ MATERI:
 
 # ============================================================
 # FORM KUIS INTERAKTIF (radio button A/B/C/D + penilaian otomatis)
+# Hanya dirender kalau quiz_data sudah ada.
 # ============================================================
 def render_quiz_form():
     quiz_data = st.session_state.get("quiz_data")
     if not quiz_data or not quiz_data.get("soal_list"):
-        st.info(
-            "Belum ada soal. Ketik **'buat soal'** di panel Chat sebelah kiri untuk "
-            "membuat soal latihan berdasarkan materi yang diupload."
-        )
         return
 
     soal_list = quiz_data["soal_list"]
@@ -295,7 +292,7 @@ def render_quiz_form():
             )
             jawaban_user[nomor] = pilihan_terpilih.split(".")[0].strip() if pilihan_terpilih else None
 
-        submitted = st.form_submit_button("📊 Lihat Hasil")
+        submitted = st.form_submit_button("📊 Lihat Hasil", use_container_width=True)
 
     if submitted:
         kunci_map = {k.get("nomor"): k.get("jawaban") for k in kunci_list}
@@ -320,9 +317,9 @@ def render_quiz_form():
 
         # Hasil disimpan terpisah dari riwayat chat, ditampilkan langsung di bawah form ini.
         st.session_state.quiz_result = hasil_text
-        st.rerun()
+        # Tidak perlu st.rerun() — form submit sudah otomatis rerun.
 
-    # Tampilkan hasil (kalau ada) tepat di bawah form, BUKAN di dalam chat.
+    # Tampilkan hasil (kalau ada) tepat di bawah form, di dalam container soal.
     if st.session_state.get("quiz_result"):
         st.markdown("---")
         st.markdown(st.session_state.quiz_result)
@@ -417,6 +414,7 @@ def render_upload():
 # HALAMAN: CHATBOT
 # ============================================================
 def render_chat():
+    # ---------- HEADER ----------
     top_left, top_right = st.columns([1, 3])
     with top_left:
         if st.button("⬅ Kembali ke Menu Utama"):
@@ -435,7 +433,19 @@ def render_chat():
             st.rerun()
         return
 
-    col_chat, col_soal = st.columns([5, 6], gap="large")
+    # Tentukan apakah panel soal perlu ditampilkan.
+    # Panel soal HANYA muncul setelah user minta "buat soal".
+    quiz_data = st.session_state.get("quiz_data")
+    has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
+
+    # ---------- LAYOUT ----------
+    # Sebelum ada soal  : chat full-width (1 kolom)
+    # Sesudah ada soal  : chat kiri + soal kanan (2 kolom seimbang)
+    if has_quiz:
+        col_chat, col_soal = st.columns([1, 1], gap="large")
+    else:
+        col_chat = st.container()
+        col_soal = None
 
     # ------------------------------------------------------------------
     # KOLOM KIRI: CHAT
@@ -444,15 +454,22 @@ def render_chat():
         st.subheader("💬 Chat")
         st.caption(
             "Ajukan pertanyaan berdasarkan materi, atau ketik **'buat soal'** untuk "
-            "dibuatkan soal latihan di panel sebelah kanan."
+            "dibuatkan soal latihan."
         )
 
-        chat_box = st.container(height=420)
+        # Container scroll KHUSUS untuk bubble chat.
+        # - height tetap => bubble lama tidak mendorong input ke bawah
+        # - border=True  => batas visual jelas
+        # - scroll di dalam container ini TIDAK mempengaruhi container soal
+        chat_box = st.container(height=480, border=True)
         with chat_box:
+            if not st.session_state.messages:
+                st.caption("_Belum ada pesan. Mulai dengan mengetik pertanyaan di bawah._")
             for m in st.session_state.messages:
                 with st.chat_message(m["role"]):
                     st.markdown(m["content"])
 
+        # Chat input tetap menempel di bawah kolom chat.
         user_input = st.chat_input("Ketik pesan Anda di sini...")
 
         if user_input:
@@ -490,11 +507,17 @@ def render_chat():
             st.rerun()
 
     # ------------------------------------------------------------------
-    # KOLOM KANAN: SOAL + HASIL
+    # KOLOM KANAN: SOAL (hanya muncul jika sudah ada soal)
     # ------------------------------------------------------------------
-    with col_soal:
-        st.subheader("📝 Soal")
-        render_quiz_form()
+    if col_soal is not None:
+        with col_soal:
+            st.subheader("📝 Soal")
+
+            # Container scroll KHUSUS untuk soal, terpisah dari chat.
+            # Scroll di sini TIDAK mempengaruhi container chat di kiri.
+            soal_box = st.container(height=560, border=True)
+            with soal_box:
+                render_quiz_form()
 
 
 # ============================================================
