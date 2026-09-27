@@ -10,6 +10,7 @@ from openai import OpenAI
 # ============================================================
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
+PANEL_HEIGHT = 500  # tinggi tetap (px) untuk kotak Chat & Soal -> scroll independen
 
 SOAL_TRIGGER_PATTERNS = [
     r"\bbuat(?:kan)?\s+soal\b",
@@ -21,14 +22,17 @@ SOAL_TRIGGER_PATTERNS = [
 ]
 KUNCI_JAWABAN_PATTERN = r"\bkunci\s+jawaban\b"
 
+
 # ============================================================
 # UTIL
 # ============================================================
 def is_soal_trigger(normalized_text: str) -> bool:
     return any(re.search(p, normalized_text) for p in SOAL_TRIGGER_PATTERNS)
 
+
 def is_kunci_jawaban_request(normalized_text: str) -> bool:
     return re.search(KUNCI_JAWABAN_PATTERN, normalized_text) is not None
+
 
 # ============================================================
 # OPENAI CLIENT
@@ -47,6 +51,7 @@ def get_openai_client() -> OpenAI:
         st.stop()
 
     return OpenAI(api_key=api_key)
+
 
 # ============================================================
 # BACA PDF
@@ -69,6 +74,7 @@ def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
                 text_parts.append(t)
 
     return "\n".join(text_parts), num_pages
+
 
 # ============================================================
 # GENERATE SOAL
@@ -207,6 +213,7 @@ MATERI:
         "topik": topik,
     }
 
+
 # ============================================================
 # CHAT UMUM
 # ============================================================
@@ -219,6 +226,7 @@ CODE_REQUEST_MESSAGE = (
     "Maaf, saya hanya bisa menjelaskan sesuai isi materi. "
     "Saya tidak bisa membuatkan kode program, aplikasi, atau halaman web apa pun."
 )
+
 
 def grounded_chat(
     materi_text: str,
@@ -289,6 +297,7 @@ MATERI:
     jawaban = (data.get("jawaban") or "").strip()
 
     return jawaban if jawaban else OUT_OF_CONTEXT_MESSAGE
+
 
 # ============================================================
 # FORM KUIS INTERAKTIF
@@ -397,6 +406,7 @@ def render_quiz_form():
             st.session_state.quiz_version += 1
             st.rerun()
 
+
 # ============================================================
 # STATE
 # ============================================================
@@ -410,6 +420,7 @@ def init_state():
     st.session_state.setdefault("quiz_result", None)
     st.session_state.setdefault("quiz_version", 0)
 
+
 def reset_chat_state():
     st.session_state.messages = []
     st.session_state.current_answer_text = None
@@ -417,10 +428,12 @@ def reset_chat_state():
     st.session_state.quiz_result = None
     st.session_state.quiz_version += 1
 
+
 def reset_materi_state():
     st.session_state.materi_text = None
     st.session_state.materi_filename = None
     reset_chat_state()
+
 
 # ============================================================
 # HOME
@@ -444,6 +457,7 @@ def render_home():
         reset_materi_state()
         st.session_state.page = "upload"
         st.rerun()
+
 
 # ============================================================
 # UPLOAD
@@ -500,280 +514,56 @@ def render_upload():
             st.session_state.page = "chat"
             st.rerun()
 
-# ============================================================
-# CSS CHAT
-# ============================================================
-CSS_CHAT = """
-<style>
-/* =========================================================
-   GLOBAL
-   ========================================================= */
-html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    overflow: hidden !important;
-}
-
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > section,
-section.main {
-    width: 100% !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-}
-
-header[data-testid="stHeader"],
-footer {
-    display: none !important;
-}
-
-/* =========================================================
-   BLOCK CONTAINER
-   ========================================================= */
-[data-testid="stAppViewBlockContainer"] {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    box-sizing: border-box !important;
-    padding: 4px 24px 85px 24px !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* =========================================================
-   HEADER FIXED
-   ========================================================= */
-.st-key-chat_header {
-    position: fixed !important;
-    top: 4px !important;
-    left: 5.75vw !important;
-    right: 5.75vw !important;
-    z-index: 900 !important;
-    background: #fff !important;
-    padding-bottom: 4px !important;
-}
-.st-key-chat_header > div {
-    width: 100% !important;
-}
-
-/* =========================================================
-   AREA CHAT + SOAL (baris kolom terakhir)
-   ---------------------------------------------------------
-   Kita KUNCI tinggi baris ini, dan paksa overflow hidden.
-   Ini yang mencegah scroll naik ke level halaman.
-   ========================================================= */
-[data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]:last-of-type {
-    flex: 0 0 auto !important;
-    height: calc(100vh - 145px) !important;
-    min-height: 0 !important;
-    max-height: calc(100vh - 145px) !important;
-    overflow: hidden !important;
-    align-items: stretch !important;
-}
-
-/* =========================================================
-   KOLOM (chat & soal)
-   ---------------------------------------------------------
-   Setiap kolom: flex column, tinggi penuh baris,
-   overflow HIDDEN agar isi kolom tidak "bocor" ke halaman.
-   ========================================================= */
-[data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]:last-of-type
-> div[data-testid="column"] {
-    height: 100% !important;
-    min-height: 0 !important;
-    max-height: 100% !important;
-    overflow: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-}
-
-/* =========================================================
-   WRAPPER LANGSUNG DI DALAM KOLOM
-   ---------------------------------------------------------
-   Streamlit membungkus konten kolom dengan beberapa div.
-   Semua div perantara ini harus overflow: hidden,
-   kalau tidak, scroll akan "naik" ke parent.
-   ========================================================= */
-[data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]:last-of-type
-> div[data-testid="column"]
-> div,
-[data-testid="stAppViewBlockContainer"]
-> div[data-testid="stHorizontalBlock"]:last-of-type
-> div[data-testid="column"]
-> div > div[data-testid="stVerticalBlock"] {
-    min-height: 0 !important;
-    overflow: hidden !important;
-    flex: 1 1 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* =========================================================
-   CONTAINER CHAT / SOAL (border=True)
-   ---------------------------------------------------------
-   Ini container yang SCROLL INDEPENDEN.
-   flex: 1 1 auto -> isi sisa tinggi kolom
-   overflow-y: auto -> scroll internal
-   ========================================================= */
-[data-testid="stVerticalBlockBorderWrapper"] {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    height: auto !important;
-    max-height: 100% !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    box-sizing: border-box !important;
-}
-
-/* Paksa anak dari border wrapper juga tidak overflow ke luar */
-[data-testid="stVerticalBlockBorderWrapper"] > div {
-    min-height: 0 !important;
-}
-
-/* =========================================================
-   SCROLLBAR
-   ========================================================= */
-[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar {
-    width: 7px;
-}
-[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-thumb {
-    border-radius: 10px;
-    background: rgba(120, 120, 120, 0.45);
-}
-[data-testid="stVerticalBlockBorderWrapper"]::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-/* =========================================================
-   CHAT INPUT FIXED
-   ========================================================= */
-[data-testid="stChatInput"] {
-    position: fixed !important;
-    left: 5.75vw !important;
-    right: 5.75vw !important;
-    bottom: 8px !important;
-    width: auto !important;
-    max-width: none !important;
-    z-index: 999 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-}
-[data-testid="stChatInput"] > div {
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-}
-
-/* =========================================================
-   HEADING
-   ========================================================= */
-[data-testid="stAppViewBlockContainer"] h1,
-[data-testid="stAppViewBlockContainer"] h2,
-[data-testid="stAppViewBlockContainer"] h3 {
-    margin-top: 0.2rem !important;
-}
-
-[data-testid="column"] > div,
-[data-testid="column"] > div > div[data-testid="stVerticalBlock"] {
-    min-height: 0 !important;
-    overflow: hidden !important;
-    flex: 1 1 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-}
-
-/* =========================================================
-   PREVENT AUTO ANCHOR
-   ========================================================= */
-* {
-    overflow-anchor: none !important;
-}
-</style>
-"""
 
 # ============================================================
 # CHATBOT
 # ============================================================
 def render_chat():
-    st.markdown(
-        CSS_CHAT,
-        unsafe_allow_html=True
-    )
-
     materi_text = st.session_state.get("materi_text")
     quiz_data = st.session_state.get("quiz_data")
-    has_quiz = bool(
-        quiz_data and quiz_data.get("soal_list")
-    )
+    has_quiz = bool(quiz_data and quiz_data.get("soal_list"))
 
-    # HEADER FIXED
-    with st.container(key="chat_header"):
-        top_left, top_right = st.columns([1, 3])
+    top_left, top_right = st.columns([1, 3])
+    with top_left:
+        if st.button("⬅ Kembali ke Menu Utama", key="chat_back_home"):
+            st.session_state.page = "home"
+            st.rerun()
+    with top_right:
+        st.caption(
+            f"📄 Materi aktif: "
+            f"**{st.session_state.get('materi_filename') or '-'}**"
+        )
 
-        with top_left:
-            if st.button(
-                "⬅ Kembali ke Menu Utama",
-                key="chat_back_home"
-            ):
-                st.session_state.page = "home"
-                st.rerun()
-
-        with top_right:
-            st.caption(
-                f"📄 Materi aktif: "
-                f"**{st.session_state.get('materi_filename') or '-'}**"
-            )
-
-        st.markdown("### 🎓 Chatbot Soal Latihan")
+    st.markdown("### 🎓 Chatbot Soal Latihan")
 
     if not materi_text:
         st.warning("Materi belum diupload.")
-
-        if st.button(
-            "Ke Halaman Upload",
-            key="chat_go_upload"
-        ):
+        if st.button("Ke Halaman Upload", key="chat_go_upload"):
             st.session_state.page = "upload"
             st.rerun()
-
         return
 
     # LAYOUT CHAT + SOAL
     if has_quiz:
-        col_chat, col_soal = st.columns(
-            [1, 1],
-            gap="medium"
-        )
+        col_chat, col_soal = st.columns([1, 1], gap="medium")
     else:
         col_chat = st.container()
         col_soal = None
 
     # ========================================================
     # CHAT COLUMN
+    # Kotak dengan height tetap -> Streamlit otomatis membuat
+    # scrollbar SENDIRI di dalam kotak ini, TERPISAH dari halaman
+    # utama dan dari kotak Soal di sebelahnya.
     # ========================================================
     with col_chat:
         st.markdown("#### 💬 Chat")
-
         st.caption(
             "Ajukan pertanyaan berdasarkan materi, atau ketik "
             "**'buat soal'** untuk dibuatkan soal latihan."
         )
 
-        chat_box = st.container(
-            border=True
-        )
-
+        chat_box = st.container(height=PANEL_HEIGHT, border=True)
         with chat_box:
             if not st.session_state.messages:
                 st.caption(
@@ -787,24 +577,23 @@ def render_chat():
 
     # ========================================================
     # SOAL COLUMN
+    # Sama seperti kotak chat: height tetap -> scroll independen.
     # ========================================================
     if col_soal is not None:
         with col_soal:
             st.markdown("#### 📝 Soal")
 
-            soal_box = st.container(
-                border=True
-            )
-
+            soal_box = st.container(height=PANEL_HEIGHT, border=True)
             with soal_box:
                 render_quiz_form()
 
     # ========================================================
     # CHAT INPUT
+    # Dipanggil di level atas (bukan di dalam kolom) supaya
+    # otomatis menempel di bagian bawah halaman (perilaku bawaan
+    # Streamlit untuk st.chat_input).
     # ========================================================
-    user_input = st.chat_input(
-        "Ketik pesan Anda di sini..."
-    )
+    user_input = st.chat_input("Ketik pesan Anda di sini...")
 
     # ========================================================
     # PROCESS CHAT
@@ -860,6 +649,7 @@ def render_chat():
 
         st.rerun()
 
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -880,6 +670,7 @@ def main():
         render_upload()
     else:
         render_chat()
+
 
 if __name__ == "__main__":
     main()
