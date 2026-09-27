@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import glob
 import streamlit as st
 import pdfplumber
 from openai import OpenAI
@@ -11,6 +12,7 @@ from openai import OpenAI
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
 PANEL_HEIGHT = 500  # tinggi tetap (px) untuk kotak Chat & Soal -> scroll independen
+MATERI_DIR = "materi"  # folder berisi PDF materi bawaan aplikasi
 
 SOAL_TRIGGER_PATTERNS = [
     r"\bbuat(?:kan)?\s+soal\b",
@@ -74,6 +76,34 @@ def read_uploaded_pdf(uploaded_file, max_pages: int = MAX_PDF_PAGES):
                 text_parts.append(t)
 
     return "\n".join(text_parts), num_pages
+
+
+# ============================================================
+# MATERI BAWAAN APLIKASI (folder materi/)
+# ============================================================
+def list_local_materi():
+    """Kembalikan list path PDF yang ada di folder MATERI_DIR."""
+    if not os.path.isdir(MATERI_DIR):
+        return []
+    return sorted(glob.glob(os.path.join(MATERI_DIR, "*.pdf")))
+
+
+def load_local_pdf(path: str):
+    """Baca PDF lokal (materi bawaan aplikasi), tanpa batas halaman."""
+    with pdfplumber.open(path) as pdf:
+        num_pages = len(pdf.pages)
+        text_parts = []
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                text_parts.append(t)
+    return "\n".join(text_parts), num_pages
+
+
+def materi_display_title(path: str) -> str:
+    """Ubah nama file jadi judul yang lebih rapi untuk ditampilkan di card."""
+    filename = os.path.splitext(os.path.basename(path))[0]
+    return filename.replace("_", " ").replace("-", " ").strip().title()
 
 
 # ============================================================
@@ -458,6 +488,39 @@ def render_home():
         st.session_state.page = "upload"
         st.rerun()
 
+    st.divider()
+    st.subheader("📚 Daftar Materi Tersimpan")
+
+    local_materi_paths = list_local_materi()
+
+    if not local_materi_paths:
+        st.caption("Belum ada materi tersimpan di aplikasi.")
+    else:
+        for path in local_materi_paths:
+            title = materi_display_title(path)
+            filename = os.path.basename(path)
+
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                if st.button(
+                    "Gunakan Materi Ini",
+                    use_container_width=True,
+                    key=f"use_local_{filename}",
+                ):
+                    with st.spinner("Memuat materi..."):
+                        materi_text, num_pages = load_local_pdf(path)
+
+                    if not materi_text.strip():
+                        st.error(
+                            "Materi ini tidak memiliki teks yang bisa dibaca."
+                        )
+                    else:
+                        st.session_state.materi_text = materi_text
+                        st.session_state.materi_filename = filename
+                        reset_chat_state()
+                        st.session_state.page = "chat"
+                        st.rerun()
+
 
 # ============================================================
 # UPLOAD
@@ -654,10 +717,16 @@ def render_chat():
 # MAIN
 # ============================================================
 def main():
+    # Tentukan layout SEBELUM set_page_config (harus jadi perintah st. pertama).
+    # Halaman Chat pakai "wide" karena butuh 2 kolom (Chat + Soal),
+    # halaman lain pakai lebar normal Streamlit ("centered").
+    current_page = st.session_state.get("page", "home")
+    layout = "wide" if current_page == "chat" else "centered"
+
     st.set_page_config(
         page_title="Schoool Question Generated",
         page_icon="📚",
-        layout="wide",
+        layout=layout,
         initial_sidebar_state="collapsed",
     )
 
