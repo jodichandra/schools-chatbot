@@ -11,7 +11,7 @@ from openai import OpenAI
 # ============================================================
 MODEL_NAME = "gpt-4o-mini"
 MAX_PDF_PAGES = 5
-PANEL_HEIGHT = 500  # tinggi tetap (px) untuk kotak Chat & Soal -> scroll independen
+PANEL_HEIGHT = 250  # tinggi tetap (px) untuk kotak Chat & Soal -> scroll independen
 MATERI_DIR = "materi"  # folder berisi PDF materi bawaan aplikasi
 
 SOAL_TRIGGER_PATTERNS = [
