@@ -342,8 +342,6 @@ def render_quiz_form():
     kunci_list = quiz_data["kunci_list"]
     version = st.session_state.get("quiz_version", 0)
 
-    st.markdown("#### ✏️ Jawab Soal di Bawah Ini")
-
     with st.form(key=f"quiz_form_{version}"):
         jawaban_user = {}
 
