@@ -620,7 +620,6 @@ def render_chat():
     # utama dan dari kotak Soal di sebelahnya.
     # ========================================================
     with col_chat:
-        st.markdown("#### 💬 Chat")
         st.caption(
             "Ajukan pertanyaan berdasarkan materi, atau ketik "
             "**'buat soal'** untuk dibuatkan soal latihan."
