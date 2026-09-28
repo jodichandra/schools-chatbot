@@ -595,7 +595,7 @@ def render_chat():
             f"**{st.session_state.get('materi_filename') or '-'}**"
         )
 
-    st.markdown("### 🎓 Chatbot Soal Latihan")
+    st.markdown("<h3 style='text-align: center;'>🎓 Chatbot Soal Latihan</h3>", unsafe_allow_html=True)
 
     if not materi_text:
         st.warning("Materi belum diupload.")
