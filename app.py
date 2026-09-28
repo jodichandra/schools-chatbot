@@ -643,7 +643,7 @@ def render_chat():
     # ========================================================
     if col_soal is not None:
         with col_soal:
-            st.markdown("#### 📝 Soal")
+            st.caption("#### 📝 Soal")
 
             soal_box = st.container(height=PANEL_HEIGHT, border=True)
             with soal_box:
