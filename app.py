@@ -643,7 +643,7 @@ def render_chat():
     # ========================================================
     if col_soal is not None:
         with col_soal:
-            st.caption("#### 📝 Soal")
+            st.caption("Jawab soal latihan di bawah ini. Scroll untuk melihat semua soal.")
 
             soal_box = st.container(height=PANEL_HEIGHT, border=True)
             with soal_box:
