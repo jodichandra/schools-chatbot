@@ -1,7 +1,7 @@
-# 📚 Schoool Question Generated For 3 SD
+# 📚 Schoool Question Generated From PDF File
 
 Final Project — Chatbot AI berbasis Streamlit untuk membuat soal latihan
-anak kelas 3 SD, dari materi PDF yang disediakan. Chatbot hanya menjawab
+berdasarkan materi PDF yang disediakan. Chatbot hanya menjawab
 berdasarkan isi PDF materi (tidak menjawab di luar konteks).
 
 ## Fitur
@@ -61,16 +61,3 @@ school-question-generator/
    ```bash
    streamlit run app.py
    ```
-
-## Catatan Pengembangan Lanjutan
-
-- Mata pelajaran lain (Bahasa Inggris, Bahasa Indonesia, Matematika) sudah
-  disiapkan tombolnya di halaman utama, tinggal diaktifkan dan diarahkan
-  ke halaman chatbot masing-masing dengan materi PDF yang berbeda.
-- Untuk menambah mata pelajaran baru, buat materi PDF baru + tambahkan
-  fungsi render halaman chatbot serupa `render_chat()`.
-
-## Deliverables Final Project
-
-- [ ] URL repositori GitHub
-- [ ] Screenshot User Interface (halaman utama & halaman chatbot)
